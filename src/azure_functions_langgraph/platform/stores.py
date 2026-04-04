@@ -57,6 +57,7 @@ class ThreadStore(Protocol):
         status: ThreadStatus | None = None,
         values: dict[str, Any] | None = None,
         interrupts: dict[str, list[Interrupt]] | None = None,
+        assistant_id: str | None = None,
     ) -> Thread:
         """Partially update a thread.
 
@@ -165,6 +166,7 @@ class InMemoryThreadStore:
         status: ThreadStatus | None = None,
         values: dict[str, Any] | None = None,
         interrupts: dict[str, list[Interrupt]] | None = None,
+        assistant_id: str | None = None,
     ) -> Thread:
         """Partially update a thread.  Raises ``KeyError`` if not found."""
         with self._lock:
@@ -183,6 +185,8 @@ class InMemoryThreadStore:
                 data["values"] = values
             if interrupts is not None:
                 data["interrupts"] = interrupts
+            if assistant_id is not None:
+                data["assistant_id"] = assistant_id
 
             updated = Thread.model_validate(data)
             self._threads[thread_id] = updated
