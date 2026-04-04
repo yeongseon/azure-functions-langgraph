@@ -68,6 +68,13 @@ class LangGraphApp:
     _registrations: dict[str, _GraphRegistration] = field(default_factory=dict)
     _function_app: Optional[func.FunctionApp] = field(default=None, init=False, repr=False)
 
+    def __post_init__(self) -> None:
+        if self.auth_level == func.AuthLevel.ANONYMOUS:
+            logger.warning(
+                "LangGraphApp is configured with anonymous HTTP auth. "
+                "Use FUNCTION or ADMIN auth levels for production deployments."
+            )
+
     def register(
         self,
         graph: Any,

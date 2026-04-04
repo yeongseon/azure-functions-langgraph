@@ -18,6 +18,18 @@ from tests.conftest import FakeCompiledGraph, FakeFailingGraph, FakeInvokeOnlyGr
 
 
 class TestRegistration:
+    def test_warns_for_anonymous_auth_level(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("WARNING"):
+            LangGraphApp()
+
+        assert "anonymous HTTP auth" in caplog.text
+
+    def test_no_warning_for_function_auth_level(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("WARNING"):
+            LangGraphApp(auth_level=func.AuthLevel.FUNCTION)
+
+        assert "anonymous HTTP auth" not in caplog.text
+
     def test_register_single_graph(self, fake_graph: FakeCompiledGraph) -> None:
         app = LangGraphApp()
         app.register(graph=fake_graph, name="agent")
