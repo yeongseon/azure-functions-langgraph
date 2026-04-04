@@ -112,6 +112,27 @@ app.register(graph=graph, name="echo_agent")
 func_app = app.function_app  # ← use this as your Azure Functions app
 ```
 
+### Production authentication
+
+`LangGraphApp` defaults to `AuthLevel.ANONYMOUS` for local development convenience.
+For production deployments, prefer `FUNCTION` or `ADMIN` auth and send the Azure Functions key.
+
+```python
+import azure.functions as func
+
+from azure_functions_langgraph import LangGraphApp
+
+app = LangGraphApp(auth_level=func.AuthLevel.FUNCTION)
+```
+
+Example request using a function key:
+
+```bash
+curl -X POST "https://<app>.azurewebsites.net/api/graphs/echo_agent/invoke?code=<FUNCTION_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"messages": [{"role": "human", "content": "Hello!"}]}}'
+```
+
 ### What you get
 
 1. `POST /api/graphs/echo_agent/invoke` — invoke the agent
