@@ -40,6 +40,11 @@ class TestRegistration:
         app.register(graph=fake_graph, name="agent", description="My agent")
         assert app._registrations["agent"].description == "My agent"
 
+    def test_register_invoke_only_mode(self, fake_graph: FakeCompiledGraph) -> None:
+        app = LangGraphApp()
+        app.register(graph=fake_graph, name="agent", stream=False)
+        assert app._registrations["agent"].stream_enabled is False
+
     def test_register_invalid_graph_raises(self) -> None:
         app = LangGraphApp()
         with pytest.raises(TypeError, match="invoke"):
@@ -301,6 +306,17 @@ class TestStreamHandler:
         req = self._make_request({"input": {"messages": []}})
         resp = app._handle_stream(req, app._registrations["agent"])
         assert resp.status_code == 501
+
+    def test_stream_returns_501_when_registered_in_invoke_only_mode(self) -> None:
+        app = LangGraphApp()
+        app.register(graph=FakeCompiledGraph(), name="agent", stream=False)
+        req = self._make_request({"input": {"messages": []}})
+
+        resp = app._handle_stream(req, app._registrations["agent"])
+
+        assert resp.status_code == 501
+        payload = json.loads(resp.get_body())
+        assert "invoke-only" in payload["detail"]
 
 
 # ------------------------------------------------------------------
