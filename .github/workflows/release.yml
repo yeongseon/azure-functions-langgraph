@@ -25,7 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install git-cliff
-        run: pip install git-cliff
+        run: pip install "git-cliff>=2.12,<3"
 
       - name: Generate changelog
         run: git-cliff --latest --strip header -o RELEASE_NOTES.md
