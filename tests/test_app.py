@@ -15,6 +15,7 @@ from tests.conftest import (
     FakeFailingGraph,
     FakeFailingStatefulGraph,
     FakeInvokeOnlyGraph,
+    FakeNotFoundStatefulGraph,
     FakeStatefulGraph,
 )
 
@@ -525,18 +526,31 @@ class TestStateHandler:
         data = json.loads(resp.get_body())
         assert "Missing thread_id" in data["detail"]
 
-    def test_state_get_state_failure_returns_404(
+    def test_state_get_state_unexpected_error_returns_500(
         self, fake_failing_stateful_graph: FakeFailingStatefulGraph
     ) -> None:
+        """Unexpected errors (not KeyError/ValueError) must return 500, not 404."""
         app = LangGraphApp()
         app.register(graph=fake_failing_stateful_graph, name="agent")
         req = self._make_state_request("bad_thread")
         resp = app._handle_state(req, app._registrations["agent"])
+        assert resp.status_code == 500
+        data = json.loads(resp.get_body())
+        assert "Internal error" in data["detail"]
+        # Must NOT leak internal error message
+        assert "Checkpointer unavailable" not in data["detail"]
+
+    def test_state_thread_not_found_returns_404(
+        self, fake_not_found_stateful_graph: FakeNotFoundStatefulGraph
+    ) -> None:
+        """KeyError from get_state should return 404 (thread not found)."""
+        app = LangGraphApp()
+        app.register(graph=fake_not_found_stateful_graph, name="agent")
+        req = self._make_state_request("missing-thread")
+        resp = app._handle_state(req, app._registrations["agent"])
         assert resp.status_code == 404
         data = json.loads(resp.get_body())
         assert "not found" in data["detail"]
-        # Must NOT leak internal error message
-        assert "Checkpointer unavailable" not in data["detail"]
 
     def test_state_route_only_registered_for_stateful_graph(self) -> None:
         """State route should only exist for graphs satisfying StatefulGraph."""

@@ -138,6 +138,28 @@ class FakeFailingStatefulGraph:
     def get_state(self, config: dict[str, Any]) -> Any:
         raise RuntimeError("Checkpointer unavailable")
 
+class FakeNotFoundStatefulGraph:
+    """StatefulGraph that raises KeyError on get_state (thread not found)."""
+
+    checkpointer = "memory"
+
+    def invoke(
+        self, input: dict[str, Any], config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        return {"result": "ok"}
+
+    def stream(
+        self,
+        input: dict[str, Any],
+        config: dict[str, Any] | None = None,
+        stream_mode: str = "values",
+    ) -> Iterator[dict[str, Any]]:
+        yield {"data": "chunk"}
+
+    def get_state(self, config: dict[str, Any]) -> Any:
+        raise KeyError("thread-xyz")
+
+
 @pytest.fixture
 def fake_graph() -> FakeCompiledGraph:
     return FakeCompiledGraph()
@@ -166,3 +188,8 @@ def fake_stateful_graph() -> FakeStatefulGraph:
 @pytest.fixture
 def fake_failing_stateful_graph() -> FakeFailingStatefulGraph:
     return FakeFailingStatefulGraph()
+
+
+@pytest.fixture
+def fake_not_found_stateful_graph() -> FakeNotFoundStatefulGraph:
+    return FakeNotFoundStatefulGraph()

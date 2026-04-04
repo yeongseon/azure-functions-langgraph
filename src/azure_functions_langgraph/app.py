@@ -336,12 +336,18 @@ class LangGraphApp:
 
         try:
             snapshot = reg.graph.get_state(config)
-        except Exception as exc:
+        except (KeyError, ValueError):
+            logger.warning(
+                "Graph %s: thread %s not found", reg.name, thread_id
+            )
+            return _error_response(404, f"Thread {thread_id!r} not found")
+        except Exception:
             logger.exception(
                 "Graph %s get_state failed for thread %s", reg.name, thread_id
             )
-            _ = exc
-            return _error_response(404, f"Thread {thread_id!r} not found")
+            return _error_response(
+                500, "Internal error while retrieving thread state"
+            )
 
         values = snapshot.values if isinstance(snapshot.values, dict) else {}
         next_nodes: list[str] = list(snapshot.next) if hasattr(snapshot, "next") else []
