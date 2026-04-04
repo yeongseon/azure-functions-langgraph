@@ -29,6 +29,7 @@ class _GraphRegistration:
     graph: InvocableGraph
     name: str
     description: Optional[str] = None
+    stream_enabled: bool = True
 
 
 @dataclass
@@ -70,6 +71,7 @@ class LangGraphApp:
         graph: Any,
         name: str,
         description: Optional[str] = None,
+        stream: bool = True,
     ) -> None:
         """Register a compiled LangGraph graph.
 
@@ -91,6 +93,7 @@ class LangGraphApp:
             graph=graph,
             name=name,
             description=description,
+            stream_enabled=stream,
         )
         # Reset cached function app so routes are re-generated
         self._function_app = None
@@ -194,6 +197,9 @@ class LangGraphApp:
         known v0.1 limitation — true chunked streaming will follow once Azure
         Functions Python HTTP streaming is fully stable.
         """
+        if not reg.stream_enabled:
+            return _error_response(501, f"Graph {reg.name!r} is configured as invoke-only")
+
         if not isinstance(reg.graph, StreamableGraph):
             return _error_response(501, f"Graph {reg.name!r} does not support streaming")
 
