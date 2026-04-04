@@ -89,6 +89,7 @@ class Thread(BaseModel):
     metadata: Json = None
     status: ThreadStatus = "idle"
     values: Json = None
+    assistant_id: Optional[str] = None
     interrupts: dict[str, list[Interrupt]] = Field(default_factory=dict)
 
 
@@ -167,6 +168,8 @@ class RunCreate(BaseModel):
     on_completion: Optional[str] = None
     after_seconds: Optional[float] = None
     if_not_exists: Optional[str] = None
+    command: Optional[dict[str, Any]] = None
+    feedback_keys: Optional[list[str]] = None
 
 
 class ThreadCreate(BaseModel):

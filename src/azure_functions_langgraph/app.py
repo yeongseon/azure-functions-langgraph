@@ -68,8 +68,10 @@ class LangGraphApp:
 
     auth_level: func.AuthLevel = func.AuthLevel.ANONYMOUS
     max_stream_response_bytes: int = 1024 * 1024
+    platform_compat: bool = False
     _registrations: dict[str, _GraphRegistration] = field(default_factory=dict)
     _function_app: Optional[func.FunctionApp] = field(default=None, init=False, repr=False)
+    _thread_store: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.auth_level == func.AuthLevel.ANONYMOUS and os.environ.get(
@@ -79,6 +81,10 @@ class LangGraphApp:
                 "LangGraphApp is configured with anonymous HTTP auth. "
                 "Use FUNCTION or ADMIN auth levels for production deployments."
             )
+        if self.platform_compat and self._thread_store is None:
+            from azure_functions_langgraph.platform.stores import InMemoryThreadStore
+
+            self._thread_store = InMemoryThreadStore()
 
     def register(
         self,
@@ -124,6 +130,20 @@ class LangGraphApp:
             self._function_app = self._build_function_app()
         return self._function_app
 
+    @property
+    def thread_store(self) -> Any:
+        """Return the thread store, or ``None`` if platform compat is disabled."""
+        return self._thread_store
+
+    @thread_store.setter
+    def thread_store(self, store: Any) -> None:
+        """Set a custom thread store implementation.
+
+        Must be called before accessing :attr:`function_app`.
+        """
+        self._thread_store = store
+        self._function_app = None  # invalidate cached routes
+
     # ------------------------------------------------------------------
     # Internal route builders
     # ------------------------------------------------------------------
@@ -167,6 +187,21 @@ class LangGraphApp:
             self._register_stream_route(app, reg)
             if isinstance(reg.graph, StatefulGraph):
                 self._register_state_route(app, reg)
+
+        # Platform API compatibility routes
+        if self.platform_compat:
+            from azure_functions_langgraph.platform.routes import (
+                PlatformRouteDeps,
+                register_platform_routes,
+            )
+
+            deps = PlatformRouteDeps(
+                registrations=self._registrations,
+                thread_store=self._thread_store,
+                auth_level=self.auth_level,
+                max_stream_response_bytes=self.max_stream_response_bytes,
+            )
+            register_platform_routes(app, deps)
 
         return app
 
