@@ -1167,6 +1167,44 @@ class TestThreadsStateGet:
         resp = fn(req)
         assert resp.status_code == 409
 
+    def test_state_checkpoint_propagation(self, store: InMemoryThreadStore) -> None:
+        """GET /state returns checkpoint_id from snapshot config (regression)."""
+        from tests.conftest import _FakeStateSnapshot
+        snapshot = _FakeStateSnapshot(
+            values={"count": 42},
+            config={
+                "configurable": {
+                    "thread_id": "t",
+                    "checkpoint_id": "cp-abc",
+                    "checkpoint_ns": "",
+                }
+            },
+            parent_config={
+                "configurable": {
+                    "thread_id": "t",
+                    "checkpoint_id": "cp-prev",
+                    "checkpoint_ns": "",
+                }
+            },
+            created_at="2025-01-01T00:00:00Z",
+        )
+        g = FakeStatefulGraph(state_snapshot=snapshot)
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fa = app.function_app
+        fn = _get_fn(fa, "aflg_platform_threads_state_get")
+        req = _get_request(
+            f"/api/threads/{thread.thread_id}/state",
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert data["checkpoint"]["checkpoint_id"] == "cp-abc"
+        assert data["parent_checkpoint"]["checkpoint_id"] == "cp-prev"
+        assert data["created_at"] == "2025-01-01T00:00:00Z"
 
 # ---------------------------------------------------------------------------
 # Runs/wait endpoint
@@ -2779,3 +2817,760 @@ class TestNaNPayloadInStream:
         updated = store.get(thread.thread_id)
         assert updated is not None
         assert updated.status == "error"
+
+
+# ---------------------------------------------------------------------------
+# POST /threads/{thread_id}/state (update) — Issue #57
+# ---------------------------------------------------------------------------
+
+
+class TestThreadsStateUpdate:
+    """POST /threads/{thread_id}/state — update thread state."""
+
+    def test_update_state_basic(self, store: InMemoryThreadStore) -> None:
+        """Successful state update returns checkpoint response."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {"values": {"key": "value"}},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert "checkpoint" in data
+        cp = data["checkpoint"]
+        assert cp["thread_id"] == thread.thread_id
+        assert "checkpoint_id" in cp
+        assert cp["checkpoint_ns"] == ""
+
+    def test_update_state_with_as_node(self, store: InMemoryThreadStore) -> None:
+        """as_node is forwarded to the graph."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {"values": {"key": "value"}, "as_node": "greet"},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+
+    def test_update_state_with_checkpoint_id(self, store: InMemoryThreadStore) -> None:
+        """checkpoint_id is merged into config."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {"values": {"k": "v"}, "checkpoint_id": "cp-123"},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+
+    def test_update_state_with_checkpoint_object(self, store: InMemoryThreadStore) -> None:
+        """checkpoint object merges fields into config."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+        tid = thread.thread_id
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{tid}/state",
+            {"values": {"k": "v"}, "checkpoint": {"thread_id": tid, "checkpoint_id": "cp-x"}},
+            thread_id=tid,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+
+    def test_update_state_cross_thread_checkpoint_422(self, store: InMemoryThreadStore) -> None:
+        """checkpoint.thread_id mismatch returns 422."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {
+                "values": {"k": "v"},
+                "checkpoint": {"thread_id": "other-thread", "checkpoint_id": "cp-x"},
+            },
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 422
+        assert "does not match" in json.loads(resp.get_body())["detail"]
+
+    def test_update_state_thread_not_found_404(self, store: InMemoryThreadStore) -> None:
+        """Non-existent thread returns 404."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            "/api/threads/nonexistent/state",
+            {"values": {"k": "v"}},
+            thread_id="nonexistent",
+        )
+        resp = fn(req)
+        assert resp.status_code == 404
+
+    def test_update_state_unbound_thread_409(self, store: InMemoryThreadStore) -> None:
+        """Thread not bound to assistant returns 409."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {"values": {"k": "v"}},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 409
+
+    def test_update_state_graph_not_updatable_409(self, store: InMemoryThreadStore) -> None:
+        """Graph lacking update_state returns 409."""
+        from tests.conftest import FakeCompiledGraph
+        g = FakeCompiledGraph()  # No update_state method
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {"values": {"k": "v"}},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 409
+        assert "does not support state updates" in json.loads(resp.get_body())["detail"]
+
+    def test_update_state_graph_raises_500(self, store: InMemoryThreadStore) -> None:
+        """Graph.update_state() raising RuntimeError returns 500."""
+        from tests.conftest import FakeFailingUpdateStateGraph
+        g = FakeFailingUpdateStateGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {"values": {"k": "v"}},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 500
+
+    def test_update_state_invalid_json_400(self, store: InMemoryThreadStore) -> None:
+        """Non-JSON body returns 400."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = func.HttpRequest(
+            method="POST",
+            url=f"/api/threads/{thread.thread_id}/state",
+            body=b"not json",
+            headers={"Content-Type": "application/json"},
+            route_params={"thread_id": thread.thread_id},
+        )
+        resp = fn(req)
+        assert resp.status_code == 400
+
+    def test_update_state_missing_values_422(self, store: InMemoryThreadStore) -> None:
+        """Missing 'values' field returns 422."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {"as_node": "greet"},  # no values
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 422
+
+    def test_update_state_non_dict_body_400(self, store: InMemoryThreadStore) -> None:
+        """Array body returns 400."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = func.HttpRequest(
+            method="POST",
+            url=f"/api/threads/{thread.thread_id}/state",
+            body=json.dumps([1, 2, 3]).encode(),
+            headers={"Content-Type": "application/json"},
+            route_params={"thread_id": thread.thread_id},
+        )
+        resp = fn(req)
+        assert resp.status_code == 400
+
+    def test_update_state_invalid_thread_id_400(self, store: InMemoryThreadStore) -> None:
+        """Empty thread_id returns 400."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            "/api/threads//state",
+            {"values": {"k": "v"}},
+            thread_id="",
+        )
+        resp = fn(req)
+        assert resp.status_code == 400
+
+    def test_update_state_assistant_not_found_404(self, store: InMemoryThreadStore) -> None:
+        """Thread bound to non-existent assistant returns 404."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="deleted-assistant")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {"values": {"k": "v"}},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 404
+
+    def test_update_state_values_as_list(self, store: InMemoryThreadStore) -> None:
+        """values as list[dict] is accepted (SDK supports this)."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_state_update")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/state",
+            {"values": [{"key": "val1"}, {"key": "val2"}]},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert "checkpoint" in data
+        assert data["checkpoint"]["thread_id"] == thread.thread_id
+
+# ---------------------------------------------------------------------------
+# POST /threads/{thread_id}/history — Issue #58
+# ---------------------------------------------------------------------------
+
+
+class TestThreadsHistory:
+    """POST /threads/{thread_id}/history — retrieve thread state history."""
+
+    def test_history_empty(self, store: InMemoryThreadStore) -> None:
+        """Thread with no history returns empty list."""
+        g = FakeStatefulGraph(state_history=[])
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert data == []
+
+    def test_history_returns_snapshots(self, store: InMemoryThreadStore) -> None:
+        """History returns converted ThreadState objects."""
+        from tests.conftest import _FakeStateSnapshot
+        snapshots = [
+            _FakeStateSnapshot(
+                values={"turn": 2},
+                next_nodes=("end",),
+                metadata={"step": 2},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-2",
+                        "checkpoint_ns": "",
+                    }
+                },
+                parent_config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-1",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+            _FakeStateSnapshot(
+                values={"turn": 1},
+                next_nodes=("count",),
+                metadata={"step": 1},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-1",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+        ]
+        g = FakeStatefulGraph(state_history=snapshots)
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {"limit": 10},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert len(data) == 2
+        assert data[0]["values"] == {"turn": 2}
+        assert data[0]["checkpoint"]["checkpoint_id"] == "cp-2"
+        assert data[0]["parent_checkpoint"]["checkpoint_id"] == "cp-1"
+        assert data[1]["values"] == {"turn": 1}
+        assert data[1]["checkpoint"]["checkpoint_id"] == "cp-1"
+
+    def test_history_limit(self, store: InMemoryThreadStore) -> None:
+        """limit parameter caps returned results."""
+        from tests.conftest import _FakeStateSnapshot
+        snapshots = [
+            _FakeStateSnapshot(
+                values={"turn": i},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": f"cp-{i}",
+                        "checkpoint_ns": "",
+                    }
+                },
+            )
+            for i in range(5)
+        ]
+        g = FakeStatefulGraph(state_history=snapshots)
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {"limit": 2},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert len(data) == 2
+
+    def test_history_before_filter(self, store: InMemoryThreadStore) -> None:
+        """before parameter skips snapshots until the marker checkpoint."""
+        from tests.conftest import _FakeStateSnapshot
+        snapshots = [
+            _FakeStateSnapshot(
+                values={"turn": 3},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-3",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+            _FakeStateSnapshot(
+                values={"turn": 2},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-2",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+            _FakeStateSnapshot(
+                values={"turn": 1},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-1",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+        ]
+        g = FakeStatefulGraph(state_history=snapshots)
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        # before=cp-3 means: start after cp-3
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {"limit": 10, "before": "cp-3"},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert len(data) == 2
+        assert data[0]["values"] == {"turn": 2}
+        assert data[1]["values"] == {"turn": 1}
+
+    def test_history_before_dict_filter(self, store: InMemoryThreadStore) -> None:
+        """before as dict with checkpoint_id works."""
+        from tests.conftest import _FakeStateSnapshot
+        snapshots = [
+            _FakeStateSnapshot(
+                values={"turn": 3},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-3",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+            _FakeStateSnapshot(
+                values={"turn": 2},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-2",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+        ]
+        g = FakeStatefulGraph(state_history=snapshots)
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {"limit": 10, "before": {"checkpoint_id": "cp-3"}},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert len(data) == 1
+        assert data[0]["values"] == {"turn": 2}
+
+    def test_history_metadata_filter(self, store: InMemoryThreadStore) -> None:
+        """metadata filter narrows results."""
+        from tests.conftest import _FakeStateSnapshot
+        snapshots = [
+            _FakeStateSnapshot(
+                values={"turn": 2},
+                metadata={"source": "input"},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-2",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+            _FakeStateSnapshot(
+                values={"turn": 1},
+                metadata={"source": "loop"},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-1",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+        ]
+        g = FakeStatefulGraph(state_history=snapshots)
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {"metadata": {"source": "input"}},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert len(data) == 1
+        assert data[0]["values"] == {"turn": 2}
+
+    def test_history_thread_not_found_404(self, store: InMemoryThreadStore) -> None:
+        """Non-existent thread returns 404."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            "/api/threads/nonexistent/history",
+            {},
+            thread_id="nonexistent",
+        )
+        resp = fn(req)
+        assert resp.status_code == 404
+
+    def test_history_unbound_thread_409(self, store: InMemoryThreadStore) -> None:
+        """Thread not bound to assistant returns 409."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 409
+
+    def test_history_graph_not_capable_409(self, store: InMemoryThreadStore) -> None:
+        """Graph without get_state_history returns 409."""
+        g = FakeCompiledGraph()  # No get_state_history
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 409
+        assert "does not support state history" in json.loads(resp.get_body())["detail"]
+
+    def test_history_graph_raises_500(self, store: InMemoryThreadStore) -> None:
+        """Graph.get_state_history() raising RuntimeError returns 500."""
+        from tests.conftest import FakeFailingUpdateStateGraph
+        g = FakeFailingUpdateStateGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 500
+
+    def test_history_empty_body_defaults(self, store: InMemoryThreadStore) -> None:
+        """Empty body uses default limit=10."""
+        g = FakeStatefulGraph(state_history=[])
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = func.HttpRequest(
+            method="POST",
+            url=f"/api/threads/{thread.thread_id}/history",
+            body=b"",
+            headers={},
+            route_params={"thread_id": thread.thread_id},
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        assert json.loads(resp.get_body()) == []
+
+    def test_history_invalid_json_400(self, store: InMemoryThreadStore) -> None:
+        """Non-JSON body returns 400."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = func.HttpRequest(
+            method="POST",
+            url=f"/api/threads/{thread.thread_id}/history",
+            body=b"not json",
+            headers={"Content-Type": "application/json"},
+            route_params={"thread_id": thread.thread_id},
+        )
+        resp = fn(req)
+        assert resp.status_code == 400
+
+    def test_history_cross_thread_checkpoint_422(self, store: InMemoryThreadStore) -> None:
+        """checkpoint.thread_id mismatch returns 422."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {"checkpoint": {"thread_id": "other-thread", "checkpoint_id": "cp-1"}},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 422
+        assert "does not match" in json.loads(resp.get_body())["detail"]
+
+    def test_history_invalid_thread_id_400(self, store: InMemoryThreadStore) -> None:
+        """Empty thread_id returns 400."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            "/api/threads//history",
+            {},
+            thread_id="",
+        )
+        resp = fn(req)
+        assert resp.status_code == 400
+
+    def test_history_assistant_not_found_404(self, store: InMemoryThreadStore) -> None:
+        """Thread bound to deleted assistant returns 404."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="deleted-assistant")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 404
+
+    def test_history_nonexistent_before_returns_empty(self, store: InMemoryThreadStore) -> None:
+        """before referencing a non-existent checkpoint returns empty list."""
+        from tests.conftest import _FakeStateSnapshot
+        snapshots = [
+            _FakeStateSnapshot(
+                values={"turn": 2},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-2",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+            _FakeStateSnapshot(
+                values={"turn": 1},
+                config={
+                    "configurable": {
+                        "thread_id": "t",
+                        "checkpoint_id": "cp-1",
+                        "checkpoint_ns": "",
+                    }
+                },
+            ),
+        ]
+        g = FakeStatefulGraph(state_history=snapshots)
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {"before": "nonexistent-cp-id"},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 200
+        data = json.loads(resp.get_body())
+        assert data == []
+
+    def test_history_before_dict_cross_thread_422(self, store: InMemoryThreadStore) -> None:
+        """before dict with mismatched thread_id returns 422."""
+        g = FakeStatefulGraph()
+        app = _build_platform_app(graphs={"agent": g}, store=store)
+        fa = app.function_app
+        thread = store.create()
+        store.update(thread.thread_id, assistant_id="agent")
+
+        fn = _get_fn(fa, "aflg_platform_threads_history")
+        req = _post_request(
+            f"/api/threads/{thread.thread_id}/history",
+            {"before": {"thread_id": "other-thread", "checkpoint_id": "cp-1"}},
+            thread_id=thread.thread_id,
+        )
+        resp = fn(req)
+        assert resp.status_code == 422
+        assert "does not match" in json.loads(resp.get_body())["detail"]

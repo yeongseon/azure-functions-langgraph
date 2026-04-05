@@ -249,6 +249,34 @@ class ThreadCount(BaseModel):
     metadata: Optional[dict[str, Any]] = None
     status: Optional[ThreadStatus] = None
 
+
+class ThreadStateUpdate(BaseModel):
+    """Request body to update thread state.
+
+    Covers ``POST /threads/{thread_id}/state``.
+    The SDK always sends ``values``; we require it for safety.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    values: Union[dict[str, Any], list[dict[str, Any]]]
+    as_node: Optional[str] = None
+    checkpoint_id: Optional[str] = None
+    checkpoint: Optional[dict[str, Any]] = None
+
+
+class ThreadHistoryRequest(BaseModel):
+    """Request body to query thread state history.
+
+    Covers ``POST /threads/{thread_id}/history``.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    limit: int = Field(default=10, ge=1)
+    before: Optional[Union[str, dict[str, Any]]] = None
+    metadata: Optional[dict[str, Any]] = None
+    checkpoint: Optional[dict[str, Any]] = None
 # ---------------------------------------------------------------------------
 # Public surface
 # ---------------------------------------------------------------------------
@@ -275,4 +303,6 @@ __all__ = [
     "ThreadUpdate",
     "ThreadSearch",
     "ThreadCount",
+    "ThreadStateUpdate",
+    "ThreadHistoryRequest",
 ]

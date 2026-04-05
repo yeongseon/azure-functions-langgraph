@@ -36,6 +36,26 @@ class StatefulGraph(Protocol):
 
 
 @runtime_checkable
+class UpdatableStateGraph(Protocol):
+    """Protocol for a graph that supports state updates via a checkpointer."""
+
+    def update_state(
+        self,
+        config: dict[str, Any],
+        values: dict[str, Any] | list[dict[str, Any]] | None,
+        *,
+        as_node: str | None = ...,
+    ) -> Any: ...
+
+
+@runtime_checkable
+class StateHistoryGraph(Protocol):
+    """Protocol for a graph that supports state history retrieval via a checkpointer."""
+
+    def get_state_history(self, config: dict[str, Any]) -> Any: ...
+
+
+@runtime_checkable
 class LangGraphLike(InvocableGraph, StreamableGraph, Protocol):
     """Protocol combining invoke and stream — matches LangGraph's CompiledStateGraph."""
 

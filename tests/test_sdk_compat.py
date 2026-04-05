@@ -126,6 +126,18 @@ _ROUTE_TABLE: list[tuple[str, re.Pattern[str], str, list[str]]] = [
     ),
     (
         "POST",
+        re.compile(r"^/threads/(?P<thread_id>[^/]+)/state$"),
+        "aflg_platform_threads_state_update",
+        ["thread_id"],
+    ),
+    (
+        "POST",
+        re.compile(r"^/threads/(?P<thread_id>[^/]+)/history$"),
+        "aflg_platform_threads_history",
+        ["thread_id"],
+    ),
+    (
+        "POST",
         re.compile(r"^/runs/wait$"),
         "aflg_platform_runs_wait_threadless",
         [],
@@ -460,6 +472,103 @@ class TestSdkThreads:
         client.threads.create(metadata={"env": "prod"})
         client.threads.create(metadata={"env": "dev"})
         assert client.threads.count(metadata={"env": "prod"}) == 1
+
+    def test_update_state(self) -> None:
+        """threads.update_state() updates checkpoint and returns new checkpoint info."""
+        _, client = _make_app()
+        thread = client.threads.create()
+        tid = thread["thread_id"]
+
+        # Run the graph to create a checkpoint
+        client.runs.wait(
+            tid,
+            "agent",
+            input={"user_text": "Alice", "history": [], "turn_count": 0},
+        )
+
+        # Update state with new values
+        resp = client.threads.update_state(
+            tid,
+            values={"last_reply": "Overridden"},
+            as_node="count",
+        )
+
+        # SDK returns ThreadUpdateStateResponse with checkpoint info
+        assert "checkpoint" in resp
+        cp = resp["checkpoint"]
+        assert cp["thread_id"] == tid
+        assert "checkpoint_id" in cp
+        assert "checkpoint_ns" in cp
+
+        # Verify state was updated via get_state
+        state = client.threads.get_state(tid)
+        values = state["values"]
+        assert isinstance(values, dict)
+        assert values["last_reply"] == "Overridden"
+
+    def test_update_state_unbound_409(self) -> None:
+        """threads.update_state() on unbound thread returns 409."""
+        _, client = _make_app()
+        thread = client.threads.create()
+
+        with pytest.raises(ConflictError):
+            client.threads.update_state(
+                thread["thread_id"],
+                values={"key": "val"},
+            )
+
+    def test_get_history(self) -> None:
+        """threads.get_history() returns state snapshots after runs."""
+        _, client = _make_app()
+        thread = client.threads.create()
+        tid = thread["thread_id"]
+
+        # Run graph twice to create multiple checkpoints
+        client.runs.wait(
+            tid,
+            "agent",
+            input={"user_text": "A", "history": [], "turn_count": 0},
+        )
+        client.runs.wait(
+            tid,
+            "agent",
+            input={"user_text": "B"},
+        )
+
+        history = client.threads.get_history(tid)
+        assert isinstance(history, list)
+        # Each node produces a checkpoint; 2 runs × 2 nodes = 4+
+        assert len(history) >= 2
+
+        # History is newest-first
+        for entry in history:
+            assert "values" in entry
+            assert "checkpoint" in entry
+
+    def test_get_history_with_limit(self) -> None:
+        """threads.get_history(limit=N) caps results."""
+        _, client = _make_app()
+        thread = client.threads.create()
+        tid = thread["thread_id"]
+
+        # Run graph to generate checkpoints
+        client.runs.wait(
+            tid,
+            "agent",
+            input={"user_text": "X", "history": [], "turn_count": 0},
+        )
+
+        history = client.threads.get_history(tid, limit=2)
+        assert isinstance(history, list)
+        assert len(history) <= 2
+
+    def test_get_history_unbound_409(self) -> None:
+        """threads.get_history() on unbound thread returns 409."""
+        _, client = _make_app()
+        thread = client.threads.create()
+
+        with pytest.raises(ConflictError):
+            client.threads.get_history(thread["thread_id"])
 # ---------------------------------------------------------------------------
 # Tests — Runs
 # ---------------------------------------------------------------------------
