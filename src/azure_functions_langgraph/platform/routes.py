@@ -17,6 +17,8 @@ Routes registered (under ``/api/`` prefix, managed by Azure Functions):
 * ``POST /api/threads/search``
 * ``POST /api/threads/count``
 * ``GET  /api/threads/{thread_id}/state``
+* ``POST /api/threads/{thread_id}/state``
+* ``POST /api/threads/{thread_id}/history``
 * ``POST /api/threads/{thread_id}/runs/wait``
 * ``POST /api/threads/{thread_id}/runs/stream``
 * ``POST /api/runs/wait``  *(threadless)*
@@ -50,15 +52,23 @@ from azure_functions_langgraph.platform.contracts import (
     Assistant,
     AssistantCount,
     AssistantSearch,
+    Checkpoint,
     RunCreate,
     ThreadCount,
     ThreadCreate,
+    ThreadHistoryRequest,
     ThreadSearch,
     ThreadState,
+    ThreadStateUpdate,
     ThreadUpdate,
 )
 from azure_functions_langgraph.platform.stores import ThreadStore
-from azure_functions_langgraph.protocols import StatefulGraph, StreamableGraph
+from azure_functions_langgraph.protocols import (
+    StatefulGraph,
+    StateHistoryGraph,
+    StreamableGraph,
+    UpdatableStateGraph,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +152,66 @@ def _get_threadless_graph(graph: Any) -> Any | None:
             exc_info=True,
         )
         return None
+
+
+def _snapshot_to_thread_state(snapshot: Any, thread_id: str) -> ThreadState:
+    """Convert a LangGraph ``StateSnapshot`` to the SDK ``ThreadState`` contract.
+
+    Extracts ``checkpoint_id`` and ``checkpoint_ns`` from the snapshot's
+    ``config["configurable"]`` when available, falling back to bare defaults.
+    """
+    values: dict[str, Any] | list[dict[str, Any]] = (
+        snapshot.values
+        if isinstance(snapshot.values, (dict, list))
+        else {}
+    )
+    next_nodes: list[str] = list(snapshot.next) if hasattr(snapshot, "next") else []
+    metadata = (
+        dict(snapshot.metadata)
+        if hasattr(snapshot, "metadata") and snapshot.metadata is not None
+        else None
+    )
+
+    # Extract checkpoint info from snapshot config when available
+    snap_config = getattr(snapshot, "config", None) or {}
+    snap_configurable = snap_config.get("configurable", {}) if isinstance(snap_config, dict) else {}
+    checkpoint_id = snap_configurable.get("checkpoint_id")
+    checkpoint_ns = snap_configurable.get("checkpoint_ns", "")
+
+    # Parent checkpoint from parent_config
+    parent_config = getattr(snapshot, "parent_config", None) or {}
+    parent_configurable = (
+        parent_config.get("configurable", {})
+        if isinstance(parent_config, dict)
+        else {}
+    )
+    parent_checkpoint_id = parent_configurable.get("checkpoint_id")
+    parent_checkpoint: Checkpoint | None = None
+    if parent_checkpoint_id is not None:
+        parent_checkpoint = Checkpoint(
+            thread_id=thread_id,
+            checkpoint_ns=parent_configurable.get("checkpoint_ns", ""),
+            checkpoint_id=parent_checkpoint_id,
+        )
+
+    # created_at
+    created_at_raw = getattr(snapshot, "created_at", None)
+    created_at = str(created_at_raw) if created_at_raw is not None else None
+
+    return ThreadState(
+        values=values,
+        next=next_nodes,
+        checkpoint=Checkpoint(
+            thread_id=thread_id,
+            checkpoint_ns=checkpoint_ns,
+            checkpoint_id=checkpoint_id,
+        ),
+        metadata=metadata,
+        created_at=created_at,
+        parent_checkpoint=parent_checkpoint,
+        tasks=[],
+        interrupts=[],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -584,7 +654,7 @@ def register_platform_routes(
             state = ThreadState(
                 values={},
                 next=[],
-                checkpoint={"thread_id": thread_id, "checkpoint_ns": "", "checkpoint_id": None},  # type: ignore[arg-type]
+                checkpoint=Checkpoint(thread_id=thread_id, checkpoint_ns="", checkpoint_id=None),
                 metadata=None,
                 created_at=None,
                 parent_checkpoint=None,
@@ -600,34 +670,266 @@ def register_platform_routes(
             logger.exception("get_state failed for thread %s", thread_id)
             return _platform_error(500, "Internal error retrieving thread state")
 
-        values: dict[str, Any] | list[dict[str, Any]] = (
-            snapshot.values
-            if isinstance(snapshot.values, (dict, list))
-            else {}
-        )
-        next_nodes: list[str] = list(snapshot.next) if hasattr(snapshot, "next") else []
-        metadata = (
-            dict(snapshot.metadata)
-            if hasattr(snapshot, "metadata") and snapshot.metadata is not None
-            else None
-        )
-
-        state = ThreadState(
-            values=values,
-            next=next_nodes,
-            checkpoint={"thread_id": thread_id, "checkpoint_ns": "", "checkpoint_id": None},  # type: ignore[arg-type]
-            metadata=metadata,
-            created_at=None,
-            parent_checkpoint=None,
-            tasks=[],
-            interrupts=[],
-        )
+        state = _snapshot_to_thread_state(snapshot, thread_id)
         return func.HttpResponse(
             body=json.dumps(state.model_dump(mode="json"), default=str),
             mimetype="application/json",
             status_code=200,
         )
 
+    # ── POST /threads/{thread_id}/state (update) ────────────────────
+
+    @app.function_name(name="aflg_platform_threads_state_update")
+    @app.route(
+        route="threads/{thread_id}/state", methods=["POST"], auth_level=auth
+    )
+    def threads_state_update(req: func.HttpRequest) -> func.HttpResponse:
+        thread_id = req.route_params.get("thread_id", "")
+        tid_err = validate_thread_id(thread_id)
+        if tid_err:
+            return _platform_error(400, tid_err)
+
+        # Body size check — reject before parsing
+        raw = req.get_body()
+        size_err = validate_body_size(raw, deps.max_request_body_bytes)
+        if size_err:
+            return _platform_error(400, size_err)
+        try:
+            body: dict[str, Any] = req.get_json()
+        except ValueError:
+            return _platform_error(400, "Invalid JSON body")
+
+        if not isinstance(body, dict):
+            return _platform_error(400, "Request body must be a JSON object")
+
+        try:
+            update_req = ThreadStateUpdate.model_validate(body)
+        except Exception as exc:
+            return _platform_error(422, f"Validation error: {exc}")
+
+        # Thread must exist
+        thread = deps.thread_store.get(thread_id)
+        if thread is None:
+            return _platform_error(404, f"Thread {thread_id!r} not found")
+
+        # Thread must be bound to an assistant (graph)
+        if thread.assistant_id is None:
+            return _platform_error(
+                409,
+                f"Thread {thread_id!r} is not bound to any assistant. "
+                f"Run a graph on this thread first.",
+            )
+
+        reg = deps.registrations.get(thread.assistant_id)
+        if reg is None:
+            return _platform_error(
+                404,
+                f"Assistant {thread.assistant_id!r} not found for thread {thread_id!r}",
+            )
+
+        graph = reg.graph
+        if not isinstance(graph, UpdatableStateGraph):
+            return _platform_error(
+                409,
+                f"Graph {thread.assistant_id!r} does not support state updates",
+            )
+
+        # Build config — merge checkpoint fields if provided
+        configurable: dict[str, Any] = {"thread_id": thread_id}
+        if update_req.checkpoint is not None:
+            # Validate cross-thread checkpoint
+            cp_thread_id = update_req.checkpoint.get("thread_id")
+            if cp_thread_id is not None and cp_thread_id != thread_id:
+                return _platform_error(
+                    422,
+                    f"Checkpoint thread_id {cp_thread_id!r} does not match "
+                    f"path thread_id {thread_id!r}",
+                )
+            cp_id = update_req.checkpoint.get("checkpoint_id")
+            if cp_id is not None:
+                configurable["checkpoint_id"] = cp_id
+            cp_ns = update_req.checkpoint.get("checkpoint_ns")
+            if cp_ns is not None:
+                configurable["checkpoint_ns"] = cp_ns
+        elif update_req.checkpoint_id is not None:
+            configurable["checkpoint_id"] = update_req.checkpoint_id
+        config: dict[str, Any] = {"configurable": configurable}
+
+        try:
+            result = graph.update_state(
+                config, update_req.values, as_node=update_req.as_node
+            )
+        except (KeyError, ValueError) as exc:
+            return _platform_error(
+                404, f"Cannot update state for thread {thread_id!r}: {exc}"
+            )
+        except Exception:
+            logger.exception("update_state failed for thread %s", thread_id)
+            return _platform_error(500, "Internal error updating thread state")
+
+        # Extract checkpoint_id from returned RunnableConfig
+        result_configurable = (
+            result.get("configurable", {}) if isinstance(result, dict) else {}
+        )
+        response_checkpoint = Checkpoint(
+            thread_id=thread_id,
+            checkpoint_ns=result_configurable.get("checkpoint_ns", ""),
+            checkpoint_id=result_configurable.get("checkpoint_id"),
+        )
+        payload = {"checkpoint": response_checkpoint.model_dump(mode="json")}
+        return func.HttpResponse(
+            body=json.dumps(payload, default=str),
+            mimetype="application/json",
+            status_code=200,
+        )
+
+    # ── POST /threads/{thread_id}/history ─────────────────────────────
+
+    @app.function_name(name="aflg_platform_threads_history")
+    @app.route(
+        route="threads/{thread_id}/history", methods=["POST"], auth_level=auth
+    )
+    def threads_history(req: func.HttpRequest) -> func.HttpResponse:
+        thread_id = req.route_params.get("thread_id", "")
+        tid_err = validate_thread_id(thread_id)
+        if tid_err:
+            return _platform_error(400, tid_err)
+
+        # Body size check — reject before parsing
+        raw = req.get_body()
+        size_err = validate_body_size(raw, deps.max_request_body_bytes)
+        if size_err:
+            return _platform_error(400, size_err)
+        if raw and raw.strip() != b"":
+            try:
+                body: dict[str, Any] = req.get_json()
+            except ValueError:
+                return _platform_error(400, "Invalid JSON body")
+
+            if not isinstance(body, dict):
+                return _platform_error(400, "Request body must be a JSON object")
+        else:
+            body = {}
+
+        try:
+            hist_req = ThreadHistoryRequest.model_validate(body)
+        except Exception as exc:
+            return _platform_error(422, f"Validation error: {exc}")
+
+        # Thread must exist
+        thread = deps.thread_store.get(thread_id)
+        if thread is None:
+            return _platform_error(404, f"Thread {thread_id!r} not found")
+
+        # Thread must be bound to an assistant (graph)
+        if thread.assistant_id is None:
+            return _platform_error(
+                409,
+                f"Thread {thread_id!r} is not bound to any assistant. "
+                f"Run a graph on this thread first.",
+            )
+
+        reg = deps.registrations.get(thread.assistant_id)
+        if reg is None:
+            return _platform_error(
+                404,
+                f"Assistant {thread.assistant_id!r} not found for thread {thread_id!r}",
+            )
+
+        graph = reg.graph
+        if not isinstance(graph, StateHistoryGraph):
+            return _platform_error(
+                409,
+                f"Graph {thread.assistant_id!r} does not support state history",
+            )
+
+        # Build config — include checkpoint filter if provided
+        configurable: dict[str, Any] = {"thread_id": thread_id}
+        if hist_req.checkpoint is not None:
+            # Validate cross-thread checkpoint
+            cp_thread_id = hist_req.checkpoint.get("thread_id")
+            if cp_thread_id is not None and cp_thread_id != thread_id:
+                return _platform_error(
+                    422,
+                    f"Checkpoint thread_id {cp_thread_id!r} does not match "
+                    f"path thread_id {thread_id!r}",
+                )
+            cp_id = hist_req.checkpoint.get("checkpoint_id")
+            if cp_id is not None:
+                configurable["checkpoint_id"] = cp_id
+            cp_ns = hist_req.checkpoint.get("checkpoint_ns")
+            if cp_ns is not None:
+                configurable["checkpoint_ns"] = cp_ns
+        config: dict[str, Any] = {"configurable": configurable}
+
+        try:
+            history_iter = graph.get_state_history(config)
+
+            # Apply server-side filtering: before, metadata, limit
+            # Normalize 'before' to a checkpoint_id string for comparison
+            before_id: str | None = None
+            if hist_req.before is not None:
+                if isinstance(hist_req.before, str):
+                    before_id = hist_req.before
+                elif isinstance(hist_req.before, dict):
+                    # Validate cross-thread before checkpoint
+                    before_thread_id = hist_req.before.get("thread_id")
+                    if before_thread_id is not None and before_thread_id != thread_id:
+                        return _platform_error(
+                            422,
+                            f"before checkpoint thread_id {before_thread_id!r} does not match "
+                            f"path thread_id {thread_id!r}",
+                        )
+                    before_id = hist_req.before.get("checkpoint_id")
+
+            results: list[ThreadState] = []
+            found_before = before_id is None  # If no 'before', include from start
+            for snapshot in history_iter:
+                # Extract this snapshot's checkpoint_id
+                snap_config = getattr(snapshot, "config", None) or {}
+                snap_configurable = (
+                    snap_config.get("configurable", {})
+                    if isinstance(snap_config, dict)
+                    else {}
+                )
+                snap_cp_id = snap_configurable.get("checkpoint_id")
+
+                # 'before' filter: skip until we pass the 'before' checkpoint
+                if not found_before:
+                    if snap_cp_id == before_id:
+                        found_before = True
+                    continue  # Skip this one and everything before we find the marker
+
+                # Metadata filter
+                if hist_req.metadata is not None:
+                    snap_metadata = getattr(snapshot, "metadata", None) or {}
+                    if not all(
+                        snap_metadata.get(k) == v
+                        for k, v in hist_req.metadata.items()
+                    ):
+                        continue
+
+                results.append(_snapshot_to_thread_state(snapshot, thread_id))
+                if len(results) >= hist_req.limit:
+                    break
+        except (KeyError, ValueError):
+            # No history / bad config — return empty list
+            return func.HttpResponse(
+                body=json.dumps([]),
+                mimetype="application/json",
+                status_code=200,
+            )
+        except Exception:
+            logger.exception("get_state_history failed for thread %s", thread_id)
+            return _platform_error(500, "Internal error retrieving thread history")
+
+        return func.HttpResponse(
+            body=json.dumps(
+                [s.model_dump(mode="json") for s in results], default=str
+            ),
+            mimetype="application/json",
+            status_code=200,
+        )
     # ── POST /threads/{thread_id}/runs/wait ──────────────────────────
 
     @app.function_name(name="aflg_platform_runs_wait")

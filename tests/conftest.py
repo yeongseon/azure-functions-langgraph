@@ -16,11 +16,16 @@ class _FakeStateSnapshot:
         values: dict[str, Any] | None = None,
         next_nodes: tuple[str, ...] = (),
         metadata: dict[str, Any] | None = None,
+        config: dict[str, Any] | None = None,
+        parent_config: dict[str, Any] | None = None,
+        created_at: str | None = None,
     ) -> None:
         self.values = values or {"messages": [{"role": "assistant", "content": "hi"}]}
         self.next = next_nodes
         self.metadata = metadata
-
+        self.config = config
+        self.parent_config = parent_config
+        self.created_at = created_at
 class FakeCompiledGraph:
     """Minimal mock of a LangGraph CompiledStateGraph for testing.
 
@@ -89,6 +94,8 @@ class FakeStatefulGraph:
         stream_results: list[dict[str, Any]] | None = None,
         checkpointer: Any = "memory",
         state_snapshot: _FakeStateSnapshot | None = None,
+        state_history: list[_FakeStateSnapshot] | None = None,
+        update_state_result: dict[str, Any] | None = None,
     ) -> None:
         self._invoke_result = invoke_result or {
             "messages": [{"role": "assistant", "content": "Hello!"}]
@@ -99,6 +106,14 @@ class FakeStatefulGraph:
         ]
         self.checkpointer = checkpointer
         self._state_snapshot = state_snapshot or _FakeStateSnapshot()
+        self._state_history = state_history or []
+        self._update_state_result = update_state_result or {
+            "configurable": {
+                "thread_id": "test-thread",
+                "checkpoint_id": "new-checkpoint-id",
+                "checkpoint_ns": "",
+            }
+        }
 
     def invoke(
         self, input: dict[str, Any], config: dict[str, Any] | None = None
@@ -116,6 +131,19 @@ class FakeStatefulGraph:
     def get_state(self, config: dict[str, Any]) -> _FakeStateSnapshot:
         return self._state_snapshot
 
+    def update_state(
+        self,
+        config: dict[str, Any],
+        values: dict[str, Any] | list[dict[str, Any]] | None,
+        *,
+        as_node: str | None = None,
+    ) -> dict[str, Any]:
+        return self._update_state_result
+
+    def get_state_history(
+        self, config: dict[str, Any]
+    ) -> Iterator[_FakeStateSnapshot]:
+        yield from self._state_history
 
 class FakeFailingStatefulGraph:
     """StatefulGraph that raises on get_state for error path testing."""
@@ -160,6 +188,44 @@ class FakeNotFoundStatefulGraph:
         raise KeyError("thread-xyz")
 
 
+
+class FakeFailingUpdateStateGraph:
+    """StatefulGraph that raises on update_state for error path testing."""
+
+    checkpointer = "memory"
+
+    def invoke(
+        self, input: dict[str, Any], config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        return {"result": "ok"}
+
+    def stream(
+        self,
+        input: dict[str, Any],
+        config: dict[str, Any] | None = None,
+        stream_mode: str = "values",
+    ) -> Iterator[dict[str, Any]]:
+        yield {"data": "chunk"}
+
+    def get_state(self, config: dict[str, Any]) -> _FakeStateSnapshot:
+        return _FakeStateSnapshot()
+
+    def update_state(
+        self,
+        config: dict[str, Any],
+        values: dict[str, Any] | list[dict[str, Any]] | None,
+        *,
+        as_node: str | None = None,
+    ) -> Any:
+        raise RuntimeError("Update state failed")
+
+    def get_state_history(
+        self, config: dict[str, Any]
+    ) -> Iterator[_FakeStateSnapshot]:
+        # Simulate a generator that raises during iteration (real LangGraph behaviour)
+        yield _FakeStateSnapshot()
+        raise RuntimeError("History retrieval failed")
+
 @pytest.fixture
 def fake_graph() -> FakeCompiledGraph:
     return FakeCompiledGraph()
@@ -193,3 +259,8 @@ def fake_failing_stateful_graph() -> FakeFailingStatefulGraph:
 @pytest.fixture
 def fake_not_found_stateful_graph() -> FakeNotFoundStatefulGraph:
     return FakeNotFoundStatefulGraph()
+
+
+@pytest.fixture
+def fake_failing_update_state_graph() -> FakeFailingUpdateStateGraph:
+    return FakeFailingUpdateStateGraph()
