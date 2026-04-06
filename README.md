@@ -66,6 +66,8 @@ This package provides a focused adapter for serving LangGraph graphs on Azure Fu
 
 This package is a **deployment adapter** — it wraps LangGraph, it does not replace it.
 
+> Internally, graph registration remains protocol-based (`LangGraphLike`), so any object satisfying the protocol works — but the package's documentation and examples focus on LangGraph use cases.
+
 ## What this package does not do
 
 This package does not own:

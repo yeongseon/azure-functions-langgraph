@@ -66,6 +66,8 @@
 
 本软件包是**部署适配器** — 包装 LangGraph，而非替代它。
 
+> 在内部，图注册仍然基于协议（`LangGraphLike`），因此任何满足协议的对象都可以工作 — 但本软件包的文档和示例专注于 LangGraph 使用场景。
+
 ## 本软件包不做的事
 
 本软件包不负责：
@@ -143,6 +145,37 @@ app.register(graph=graph, name="echo_agent")
 func_app = app.function_app  # ← 用作 Azure Functions 应用
 ```
 
+### 生产环境认证
+
+`LangGraphApp` 默认使用 `AuthLevel.ANONYMOUS` 以方便本地开发。
+生产部署时，建议使用 `FUNCTION` 或 `ADMIN` 认证并发送 Azure Functions 密钥。
+
+```python
+import azure.functions as func
+
+from azure_functions_langgraph import LangGraphApp
+
+app = LangGraphApp(auth_level=func.AuthLevel.FUNCTION)
+```
+
+### 按图认证
+
+可以按图覆盖应用级认证设置：
+
+```python
+# 按图认证覆盖
+app.register(graph=public_graph, name="public", auth_level=func.AuthLevel.ANONYMOUS)
+app.register(graph=private_graph, name="private", auth_level=func.AuthLevel.FUNCTION)
+```
+
+使用 Function 密钥的请求示例：
+
+```bash
+curl -X POST "https://<app>.azurewebsites.net/api/graphs/echo_agent/invoke?code=<FUNCTION_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"messages": [{"role": "human", "content": "Hello!"}]}}'
+```
+
 ### 生成的端点
 
 1. `POST /api/graphs/echo_agent/invoke` — 调用智能体
@@ -150,6 +183,25 @@ func_app = app.function_app  # ← 用作 Azure Functions 应用
 3. `GET /api/graphs/echo_agent/threads/{thread_id}/state` — 检查线程状态
 4. `GET /api/health` — 健康检查
 5. `GET /api/openapi.json` — OpenAPI 规范 *(deprecated；v0.5.0 中迁移至 azure-functions-openapi)*
+
+设置 `platform_compat=True` 时还会生成 SDK 兼容端点：
+
+6. `POST /assistants/search` — 列出已注册助手
+7. `GET /assistants/{id}` — 获取助手详情
+8. `POST /assistants/count` — 助手计数
+9. `POST /threads` — 创建线程
+10. `GET /threads/{id}` — 获取线程
+11. `PATCH /threads/{id}` — 更新线程元数据
+12. `DELETE /threads/{id}` — 删除线程
+13. `POST /threads/search` — 搜索线程
+14. `POST /threads/count` — 线程计数
+15. `POST /threads/{id}/runs/wait` — 运行并等待结果
+16. `POST /threads/{id}/runs/stream` — 运行并流式传输结果
+17. `POST /runs/wait` — 无线程运行
+18. `POST /runs/stream` — 无线程流式传输
+19. `GET /threads/{id}/state` — 获取线程状态
+20. `POST /threads/{id}/state` — 更新线程状态
+21. `POST /threads/{id}/history` — 获取状态历史
 
 ### 请求格式
 
@@ -163,6 +215,54 @@ func_app = app.function_app  # ← 用作 Azure Functions 应用
     }
 }
 ```
+
+### 持久存储 (v0.4+)
+
+使用 Azure Blob Storage 进行检查点持久化，使用 Azure Table Storage 存储线程元数据：
+
+```python
+from azure.storage.blob import ContainerClient
+from langgraph.graph import END, START, StateGraph
+from typing_extensions import TypedDict
+
+from azure_functions_langgraph import LangGraphApp
+from azure_functions_langgraph.checkpointers.azure_blob import AzureBlobCheckpointSaver
+from azure_functions_langgraph.stores.azure_table import AzureTableThreadStore
+
+
+class AgentState(TypedDict):
+    messages: list[dict[str, str]]
+
+
+def chat(state: AgentState) -> dict:
+    user_msg = state["messages"][-1]["content"]
+    return {"messages": state["messages"] + [{"role": "assistant", "content": f"Echo: {user_msg}"}]}
+
+
+# 使用 Azure Blob 检查点器构建图
+container_client = ContainerClient.from_connection_string(
+    "DefaultEndpointsProtocol=https;AccountName=...", "checkpoints"
+)
+saver = AzureBlobCheckpointSaver(container_client=container_client)
+
+builder = StateGraph(AgentState)
+builder.add_node("chat", chat)
+builder.add_edge(START, "chat")
+builder.add_edge("chat", END)
+graph = builder.compile(checkpointer=saver)
+
+# 使用 Azure Table 线程存储部署
+thread_store = AzureTableThreadStore.from_connection_string(
+    "DefaultEndpointsProtocol=https;AccountName=...", table_name="threads"
+)
+
+app = LangGraphApp(platform_compat=True)
+app.thread_store = thread_store
+app.register(graph=graph, name="echo_agent")
+func_app = app.function_app
+```
+
+检查点和线程元数据在 Azure Functions 重启后仍然保留，并可跨实例扩展。
 
 ### 从 v0.3.0 升级
 
