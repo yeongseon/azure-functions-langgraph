@@ -10,6 +10,10 @@ Modules:
 - ``contracts`` — Pydantic models for Platform API request/response shapes
 - ``stores`` — ThreadStore protocol and in-memory implementation
 - ``routes`` — Route registration for Platform-compatible endpoints
+- ``_common`` — Shared helpers, error formatting, dependency injection
+- ``_assistants`` — Assistant route handlers
+- ``_threads`` — Thread CRUD, state, and history route handlers
+- ``_runs`` — Run route handlers (threaded and threadless)
 - ``_sse`` — Internal SSE format helpers (Platform wire format)
 
 .. versionadded:: 0.3.0
