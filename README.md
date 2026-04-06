@@ -177,7 +177,7 @@ curl -s "https://<your-app>.azurewebsites.net/api/health?code=<FUNCTION_KEY>"
 {"status": "ok", "graphs": [{"name": "echo_agent", "description": null, "has_checkpointer": false}]}
 ```
 
-> Response captured from a deployed Azure Function; URL anonymized.
+> Response format verified against a temporary Azure Functions deployment of the `simple_agent` example in koreacentral (Python 3.12, Consumption plan). The Quick Start uses `echo_agent` for illustration; the health endpoint returns the same JSON structure regardless of graph name. URL anonymized.
 
 
 ### Production authentication
