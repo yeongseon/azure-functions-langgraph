@@ -54,6 +54,16 @@ class StateHistoryGraph(Protocol):
 
     def get_state_history(self, config: dict[str, Any]) -> Any: ...
 
+@runtime_checkable
+class CloneableGraph(Protocol):
+    """Protocol for a graph that supports cloning with updated configuration.
+
+    Used by threadless runs to create a checkpoint-disabled copy of the graph.
+    Matches LangGraph's ``CompiledStateGraph.copy(update=...)`` interface.
+    """
+
+    def copy(self, *, update: dict[str, Any] | None = ...) -> Any: ...
+
 
 @runtime_checkable
 class LangGraphLike(InvocableGraph, StreamableGraph, Protocol):
