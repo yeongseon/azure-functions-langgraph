@@ -48,6 +48,9 @@ app.register(graph=public_graph, name="public", auth_level=func.AuthLevel.ANONYM
 
 Use per-graph overrides to keep a strict default while exposing narrowly scoped public routes.
 
+⚠️ **Scope**: Per-graph `auth_level` overrides apply only to **native routes** (`/api/graphs/{name}/invoke`, `/api/graphs/{name}/stream`).
+When `platform_compat=True` is enabled, all platform-compatible routes (`/api/threads/...`, `/api/runs/...`) use the **app-level** `auth_level` regardless of per-graph overrides.
+
 ### API Management integration pattern
 
 For production, a common pattern is:
@@ -63,16 +66,16 @@ This creates a layered security model: edge auth and governance in APIM, key-bas
 - [Azure Functions authentication and authorization](https://learn.microsoft.com/en-us/azure/azure-functions/security-concepts)
 
 ## Observability
-### Logging integration
+### Logging integration (recommended operator instrumentation)
 
-`azure-functions-langgraph` works with the Azure Functions logging pipeline and pairs well with
-[`azure-functions-logging`](https://github.com/yeongseon/azure-functions-logging) for structured logs.
-
-Recommended production setup:
+This package does not emit structured log fields automatically.
+The following are recommended practices for production observability when building your Function App:
 
 - Emit structured fields (`graph_name`, `thread_id`, `assistant_id`, `run_id`, `status_code`, `duration_ms`).
 - Log explicit lifecycle markers: request received, graph started, graph completed/failed.
 - Include error categories (`validation_error`, `execution_error`, `storage_error`) to simplify alerting.
+
+[`azure-functions-logging`](https://github.com/yeongseon/azure-functions-logging) provides structured logging helpers that pair well with this package.
 
 ### Application Insights correlation
 
@@ -88,7 +91,16 @@ This enables end-to-end traceability for each run.
 
 ### Health endpoint
 
-`GET /health` (exposed as `GET /api/health` with the default Functions route prefix) returns service status and registered graph metadata.
+`GET /health` (exposed as `GET /api/health` with the default Functions route prefix) returns a liveness and configuration response.
+It confirms the app is running and lists registered graphs with their checkpointer status.
+
+⚠️ This is a **liveness/configuration endpoint**, not a dependency-readiness check.
+It does not probe Blob Storage, Table Storage, or downstream LLM availability.
+For deep health checks, implement a custom endpoint or use Azure Monitor availability tests.
+
+The `/health` endpoint inherits the **app-level** `auth_level`, not per-graph overrides.
+If the app uses `FUNCTION` auth, `/health` also requires a function key — even if individual graphs are `ANONYMOUS`.
+
 The response includes a list of graphs and whether each has a checkpointer.
 
 ```json
@@ -116,6 +128,7 @@ Execution timeout is governed by Azure Functions plan and `host.json`:
 | Plan | Default timeout | Maximum timeout |
 |------|-----------------|-----------------|
 | Consumption | 5 minutes | 10 minutes |
+| Flex Consumption | 30 minutes | Unlimited (configurable) |
 | Premium | 30 minutes | Unlimited (configurable) |
 | Dedicated (App Service) | 30 minutes | Unlimited |
 
@@ -128,6 +141,10 @@ Graph execution is synchronous from the HTTP handler perspective.
 - No built-in cancellation endpoint is provided for long-running graph runs.
 
 ⚠️ If a graph exceeds platform timeout, the request fails at the Functions host boundary.
+
+⚠️ **HTTP response ceiling**: Azure Functions enforces a hard **230-second** limit on HTTP response time regardless of `functionTimeout`.
+Graph invocations that exceed 230 seconds will fail with a gateway timeout even if `functionTimeout` allows longer execution.
+For workloads approaching this limit, consider async patterns (queue trigger + status polling) instead of synchronous HTTP.
 
 ### Configure timeout explicitly
 
@@ -155,6 +172,28 @@ Production guidance:
 3. Break long workflows into resumable steps via checkpointers.
 4. Route very long orchestration to Durable Functions patterns when needed.
 
+## Request & Input Limits
+
+`LangGraphApp` enforces the following defaults to protect against oversized or deeply nested payloads:
+
+| Limit | Default | Config parameter |
+|-------|---------|------------------|
+| Request body size | 1 MiB | `max_request_body_bytes` |
+| Stream response size | 1 MiB | `max_stream_response_bytes` |
+| Input JSON depth | 32 levels | `max_input_depth` |
+| Input JSON nodes | 10,000 | `max_input_nodes` |
+
+Override these in `LangGraphApp` constructor if your workload requires larger payloads:
+
+```python
+app = LangGraphApp(
+    max_request_body_bytes=2 * 1024 * 1024,  # 2 MiB
+    max_stream_response_bytes=4 * 1024 * 1024,  # 4 MiB
+)
+```
+
+Requests exceeding these limits are rejected before graph execution begins.
+
 ## Streaming Behavior
 ### Current behavior (critical)
 
@@ -168,6 +207,10 @@ This affects native and platform routes such as:
 - `POST /api/runs/stream`
 
 ⚠️ Clients receive the complete SSE body at once, not incremental chunks.
+
+⚠️ **Buffered SSE response limit**: Stream responses are capped at **1 MiB** (`max_stream_response_bytes=1_048_576` by default).
+If the accumulated SSE payload exceeds this limit, an `event: error` is injected into the SSE body rather than an HTTP 413/500.
+Adjust `max_stream_response_bytes` in `LangGraphApp` if your graph produces large streaming output.
 
 ### Why this happens
 
@@ -183,13 +226,16 @@ For long-running production runs, prefer:
 
 over the corresponding `/stream` routes to avoid UX and latency expectation mismatch.
 
+⚠️ **Note**: Thread and run routes (`/api/threads/...`, `/api/runs/...`) are only available when `platform_compat=True` is set in `LangGraphApp`.
+
 ## Concurrency & Scale
 ### Thread-assistant binding and TOCTOU race
 
 Platform routes bind a thread to its first assistant and reject assistant switches later.
 There is an explicit TOCTOU window between read and update in `platform/routes.py`.
 
-⚠️ In multi-instance deployments, naive concurrent writes can violate single-writer assumptions without compare-and-swap semantics.
+⚠️ **Operator impact**: In multi-instance deployments, concurrent requests for the same thread can race between read and write.
+Without external serialization (e.g., queue-based workers), the second writer may silently overwrite the first.
 
 See `DESIGN.md` (thread-assistant binding design decision and concurrency notes) for detailed constraints and trade-offs.
 
@@ -198,14 +244,23 @@ See `DESIGN.md` (thread-assistant binding design decision and concurrency notes)
 `AzureBlobCheckpointSaver` is designed around single-writer-per-thread semantics.
 The implementation documents concurrent-writer conflict resolution as a non-goal.
 
-⚠️ Concurrent writes to the same thread/checkpoint namespace from multiple instances can produce inconsistent checkpoint state.
+⚠️ **Operator impact**: Concurrent writes to the same thread/checkpoint namespace from multiple instances can produce inconsistent checkpoint state.
+If your deployment runs multiple Function App instances, ensure each thread's writes are serialized (see Recommended production pattern below).
 
 ### Azure Table thread store scale envelope
 
 `AzureTableThreadStore` uses a single partition key (`PartitionKey="thread"`) with client-side metadata filtering.
-This is practical for many workloads and generally works well up to roughly 100K threads.
+This is a design-envelope approximation, not an enforced limit, and generally works well up to roughly 100K threads (~500 entities/sec throughput).
 
 Beyond that envelope, consider a sharded or higher-scale backend such as Cosmos DB.
+
+### Concurrency controls
+
+Only `multitask_strategy="reject"` is supported.
+Concurrent run submissions for the same thread are rejected with HTTP 409 — no queuing or interruption is implemented.
+
+**Operator impact**: If your workload has bursts of concurrent requests targeting the same thread,
+implement client-side retry with backoff, or use the queue-based worker pattern below.
 
 ### Recommended production pattern
 
@@ -290,6 +345,7 @@ Use one of these patterns:
 - [Azure Functions authentication and authorization](https://learn.microsoft.com/en-us/azure/azure-functions/security-concepts)
 - [Azure Blob Storage documentation](https://learn.microsoft.com/en-us/azure/storage/blobs/)
 - [Azure Table Storage documentation](https://learn.microsoft.com/en-us/azure/storage/tables/)
+- [Azure Functions scale and hosting](https://learn.microsoft.com/en-us/azure/azure-functions/functions-scale)
 
 ## See Also
 
@@ -298,3 +354,4 @@ Use one of these patterns:
 - [azure-functions-logging](https://github.com/yeongseon/azure-functions-logging) — Structured logging
 - [azure-functions-doctor](https://github.com/yeongseon/azure-functions-doctor) — Pre-deploy diagnostics
 - [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) — API documentation
+- [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) — Request/response validation
