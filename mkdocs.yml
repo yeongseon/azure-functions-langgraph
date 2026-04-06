@@ -21,6 +21,10 @@ nav:
   - User Guide:
       - Usage: usage.md
       - Architecture: architecture.md
+  - Deployment:
+      - Choose a Plan: choose-a-plan.md
+      - Deploy to Azure: deployment.md
+      - Production Guide: production-guide.md
   - Examples:
       - Simple Agent: examples/simple_agent.md
   - API Reference: api.md
