@@ -12,22 +12,23 @@
 
 本文档语言: [한국어](README.ko.md) | [日本語](README.ja.md) | **简体中文** | [English](README.md)
 
-> **Beta 版本说明** — 此软件包正在积极开发中（`0.2.0`）。核心 API 趋于稳定，但可能在小版本之间发生变更。请在 GitHub 上报告问题。
+> **Beta 版本说明** — 此软件包正在积极开发中（`0.4.0`）。核心 API 趋于稳定，但可能在小版本之间发生变更。请在 GitHub 上报告问题。
 
-将 [LangGraph](https://github.com/langchain-ai/langgraph) 智能体零样板代码部署为 **Azure Functions** HTTP 端点。
+以最少的样板代码将 [LangGraph](https://github.com/langchain-ai/langgraph) 图部署为 **Azure Functions** HTTP 端点。
 
 ---
 
 **Azure Functions Python DX Toolkit** 的一部分
-→ 为 Azure Functions 带来 FastAPI 级别的开发体验
 
 ## 为什么需要
 
-将 LangGraph 智能体部署到 Azure 比想象中更困难：
+在 Azure Functions 上部署 LangGraph 比想象中更困难。
 
-- **缺少 Azure 原生部署方式** — LangGraph Platform 由 LangChain 托管，而非 Azure
-- **手动 HTTP 对接** — 将 `graph.invoke()` / `graph.stream()` 与 Azure Functions 连接需要大量重复的样板代码
-- **缺少标准模式** — 每个团队都需要为编译后的图自行构建 HTTP 包装器
+- LangGraph 不提供 Azure Functions 原生部署适配器
+- 将编译后的图公开为 HTTP 端点需要重复的连接代码
+- 团队经常为每个项目重新构建相同的 invoke/stream 包装器
+
+本软件包提供了在 Azure Functions Python v2 上部署 LangGraph 图的专用适配器。
 
 ## 主要功能
 
@@ -35,35 +36,62 @@
 - **Invoke 端点** — `POST /api/graphs/{name}/invoke` 用于同步执行
 - **Stream 端点** — `POST /api/graphs/{name}/stream` 用于缓冲式 SSE 响应
 - **Health 端点** — `GET /api/health` 列出已注册图及检查点器状态
-- **基于协议** — 与任何具有 `invoke()` 和 `stream()` 方法的对象兼容，不限于 LangGraph
 - **检查点器透传** — 通过 LangGraph 原生 config 实现基于线程的对话状态管理
-- **State 端点** — `GET /api/graphs/{name}/threads/{thread_id}/state` 用于线程状态检查（仅 StatefulGraph）
+- **State 端点** — `GET /api/graphs/{name}/threads/{thread_id}/state` 用于线程状态检查（支持时）
 - **按图认证** — `register(graph, name, auth_level=...)` 按图覆盖应用级认证
-- **OpenAPI 端点** — `GET /api/openapi.json` 自动生成 API 规范
+- **LangGraph Platform API 兼容** — 线程、运行、助手、状态的 SDK 兼容端点 (v0.3+)
+- **持久存储后端** — Azure Blob Storage 检查点器及 Azure Table Storage 线程存储 (v0.4+)
 
 ## 与 LangGraph Platform 对比
 
 | 功能 | LangGraph Platform | azure-functions-langgraph |
 |------|-------------------|--------------------------|
 | 托管 | LangChain Cloud（付费） | 您的 Azure 订阅 |
-| Invoke | `POST /runs/stream` | `POST /api/graphs/{name}/invoke` |
-|| 流式传输 | True SSE | 缓冲式 SSE（v0.2） |
-| 线程 | 内置 | 通过 LangGraph 检查点器 |
+| 助手 | 内置 | SDK 兼容 API (v0.3+) |
+| 线程生命周期 | 内置 | 创建、获取、更新、删除、搜索、计数 (v0.3+) |
+| 运行 | 内置 | 线程化 + 无线程运行 (v0.4+) |
+| 状态读取/更新 | 内置 | get_state + update_state (v0.4+) |
+| 状态历史 | 内置 | 支持过滤的检查点历史 (v0.4+) |
+| 流式传输 | True SSE | 缓冲式 SSE |
+| 持久存储 | 内置 | Azure Blob + Table Storage (v0.4+) |
 | 基础设施 | 托管服务 | Azure Functions（无服务器） |
 | 成本模型 | 按使用量/座位 | Azure Functions 定价 |
 
 ## 适用范围
 
 - Azure Functions Python **v2 编程模型**
-- 满足 `LangGraphLike` 协议的任何图（invoke + stream）
-- 基于 Pydantic v2 的请求/响应契约
+- LangGraph 图部署和 HTTP 公开
+- LangGraph 运行时关注点：invoke、stream、threads、runs、state
+- 通过伴侣软件包进行验证和 OpenAPI 的可选集成
 
 本软件包是**部署适配器** — 包装 LangGraph，而非替代它。
+
+## 本软件包不做的事
+
+本软件包不负责：
+- OpenAPI 文档生成或 Swagger UI — 请使用 [`azure-functions-openapi`](https://github.com/yeongseon/azure-functions-openapi)
+- LangGraph 契约之外的请求/响应验证 — 请使用 [`azure-functions-validation`](https://github.com/yeongseon/azure-functions-validation)
+- LangGraph 之外的通用图服务抽象
+
+> **注意 (v0.4.x)：** 本软件包出于向后兼容仍提供 `GET /api/openapi.json`。此端点已 deprecated，将在 v0.5.0 中迁移至专用的 `azure-functions-openapi` 软件包。
 
 ## 安装
 
 ```bash
 pip install azure-functions-langgraph
+```
+
+Azure 服务持久存储：
+
+```bash
+# Azure Blob Storage 检查点器
+pip install azure-functions-langgraph[azure-blob]
+
+# Azure Table Storage 线程存储
+pip install azure-functions-langgraph[azure-table]
+
+# 两者都要
+pip install azure-functions-langgraph[azure-blob,azure-table]
 ```
 
 您的 Azure Functions 应用还需要包含以下依赖：
@@ -121,7 +149,7 @@ func_app = app.function_app  # ← 用作 Azure Functions 应用
 2. `POST /api/graphs/echo_agent/stream` — 流式传输智能体响应（缓冲式 SSE）
 3. `GET /api/graphs/echo_agent/threads/{thread_id}/state` — 检查线程状态
 4. `GET /api/health` — 健康检查
-5. `GET /api/openapi.json` — OpenAPI 规范
+5. `GET /api/openapi.json` — OpenAPI 规范 *(deprecated；v0.5.0 中迁移至 azure-functions-openapi)*
 
 ### 请求格式
 
@@ -136,12 +164,21 @@ func_app = app.function_app  # ← 用作 Azure Functions 应用
 }
 ```
 
+### 从 v0.3.0 升级
+
+v0.4.0 与 v0.3.0 完全向后兼容。无破坏性变更。
+
+- **新的可选 extras**：`pip install azure-functions-langgraph[azure-blob,azure-table]` 用于持久存储
+- **新的平台端点**：线程 CRUD、状态更新/历史、无线程运行、助手计数
+- **新的协议**：`UpdatableStateGraph`、`StateHistoryGraph`（从 `azure_functions_langgraph.protocols` 可用）
+
 ## 适用场景
 
 - 需要将 LangGraph 智能体部署到 Azure Functions
 - 需要无 LangGraph Platform 费用的无服务器部署
 - 需要以最少配置为编译后的图创建 HTTP 端点
 - 需要通过 LangGraph 检查点器实现基于线程的对话状态
+- 需要通过 Azure Blob/Table Storage 实现持久状态存储
 
 ## 文档
 
@@ -152,16 +189,18 @@ func_app = app.function_app  # ← 用作 Azure Functions 应用
 
 ## 生态系统
 
-**Azure Functions Python DX Toolkit** 的一部分：
+本软件包是 **Azure Functions Python DX Toolkit** 的一部分。
+
+**设计原则：** `azure-functions-langgraph` 负责 LangGraph 运行时公开。`azure-functions-validation` 负责验证。`azure-functions-openapi` 负责 API 文档。
 
 | 软件包 | 用途 |
 |--------|------|
-| [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | 请求和响应验证 |
-| [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI 规范和 Swagger UI |
+| **azure-functions-langgraph** | Azure Functions 用 LangGraph 部署适配器 |
+| [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | 请求/响应验证和序列化 |
+| [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI 规范生成和 Swagger UI |
 | [azure-functions-logging](https://github.com/yeongseon/azure-functions-logging) | 结构化日志和可观测性 |
 | [azure-functions-doctor](https://github.com/yeongseon/azure-functions-doctor) | 部署前诊断 CLI |
 | [azure-functions-scaffold](https://github.com/yeongseon/azure-functions-scaffold) | 项目脚手架 |
-| **azure-functions-langgraph** | LangGraph 智能体部署 |
 | [azure-functions-durable-graph](https://github.com/yeongseon/azure-functions-durable-graph) | 基于 Durable Functions 的清单图运行时 |
 | [azure-functions-python-cookbook](https://github.com/yeongseon/azure-functions-python-cookbook) | 示例和食谱 |
 

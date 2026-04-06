@@ -22,7 +22,7 @@ flowchart TB
         FA --> STR["POST /graphs/{name}/stream"]
         FA --> GST["GET /graphs/{name}/threads/{id}/state"]
         FA --> HLT["GET /health"]
-        FA --> OAI["GET /openapi.json"]
+        FA --> OAI["GET /openapi.json (deprecated)"]
     end
 
     subgraph Platform ["Platform-Compatible Routes (platform_compat=True, subset shown)"]
@@ -101,6 +101,19 @@ Graphs that implement `get_state(config)` (i.e., graphs compiled with a checkpoi
 **Decision**: Add `UpdatableStateGraph` and `StateHistoryGraph` protocols to `protocols.py`, each with `@runtime_checkable`. Route handlers use `isinstance()` checks to return 409 when a graph doesn't support the operation.
 
 **Consequences**: Graceful degradation — graphs without these capabilities still work for all other endpoints. New protocols follow the same pattern as existing `StatefulGraph` and `StreamableGraph`.
+
+### 11. Ecosystem responsibility boundaries
+
+**Context**: The Azure Functions Python DX Toolkit has grown to multiple packages with overlapping capabilities.
+
+**Decision**: Establish clear responsibility boundaries:
+- `azure-functions-langgraph` owns LangGraph runtime exposure (graph deployment, invoke, stream, threads, runs, state)
+- `azure-functions-validation` owns request/response validation and serialization
+- `azure-functions-openapi` owns API documentation (OpenAPI spec generation, Swagger UI)
+
+**Consequences**: The built-in `GET /api/openapi.json` endpoint is deprecated in v0.4.x and will be removed in favor of the dedicated `azure-functions-openapi` package in v0.5.0. A bridge module (`azure_functions_langgraph.openapi`) will allow users to register LangGraph endpoints with the external openapi package.
+
+**Non-goals**: Absorbing validation or documentation concerns into this package.
 
 ## Module Structure
 

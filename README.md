@@ -14,20 +14,21 @@ Read this in: [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中
 
 > **Beta Notice** — This package is under active development (`0.4.0`). Core APIs are stabilizing but may still change between minor releases. Please report issues on GitHub.
 
-Deploy [LangGraph](https://github.com/langchain-ai/langgraph) agents as **Azure Functions** HTTP endpoints with zero boilerplate.
+Deploy [LangGraph](https://github.com/langchain-ai/langgraph) graphs as **Azure Functions** HTTP endpoints with minimal boilerplate.
 
 ---
 
 Part of the **Azure Functions Python DX Toolkit**
-→ Bring FastAPI-like developer experience to Azure Functions
 
 ## Why this exists
 
-Deploying LangGraph agents to Azure is harder than it should be:
+Deploying LangGraph on Azure Functions is harder than it should be.
 
-- **No Azure-native deployment** — LangGraph Platform is hosted by LangChain, not Azure
-- **Manual HTTP wiring** — bridging `graph.invoke()` / `graph.stream()` to Azure Functions requires repetitive boilerplate
-- **No standard pattern** — each team builds its own HTTP wrapper around compiled graphs
+- LangGraph does not provide an Azure Functions-native deployment adapter
+- Exposing compiled graphs as HTTP endpoints requires repetitive wiring
+- Teams often rebuild the same invoke/stream wrapper for every project
+
+This package provides a focused adapter for serving LangGraph graphs on Azure Functions Python v2.
 
 ## What it does
 
@@ -35,11 +36,9 @@ Deploying LangGraph agents to Azure is harder than it should be:
 - **Invoke endpoint** — `POST /api/graphs/{name}/invoke` for synchronous execution
 - **Stream endpoint** — `POST /api/graphs/{name}/stream` for buffered SSE responses
 - **Health endpoint** — `GET /api/health` listing registered graphs with checkpointer status
-- **Protocol-based** — works with any object that has `invoke()` and `stream()` methods, not just LangGraph
 - **Checkpointer pass-through** — thread-based conversation state works via LangGraph's native config
-- **State endpoint** — `GET /api/graphs/{name}/threads/{thread_id}/state` for thread state inspection (StatefulGraph only)
-- **Per-graph auth** — Override app-level auth per graph with `register(graph, name, auth_level=...)`
-- **OpenAPI endpoint** — `GET /api/openapi.json` auto-generated API specification
+- **State endpoint** — `GET /api/graphs/{name}/threads/{thread_id}/state` for thread state inspection (when supported)
+- **Per-graph auth** — override app-level auth with `register(..., auth_level=...)`
 - **LangGraph Platform API compatibility** — SDK-compatible endpoints for threads, runs, assistants, and state (v0.3+)
 - **Persistent storage backends** — Azure Blob Storage checkpointer and Azure Table Storage thread store (v0.4+)
 
@@ -61,10 +60,20 @@ Deploying LangGraph agents to Azure is harder than it should be:
 ## Scope
 
 - Azure Functions Python **v2 programming model**
-- Any graph satisfying the `LangGraphLike` protocol (invoke + stream)
-- Pydantic v2-based request/response contracts
+- LangGraph graph deployment and HTTP exposure
+- LangGraph runtime concerns: invoke, stream, threads, runs, and state
+- Optional integration points for validation and OpenAPI via companion packages
 
 This package is a **deployment adapter** — it wraps LangGraph, it does not replace it.
+
+## What this package does not do
+
+This package does not own:
+- OpenAPI document generation or Swagger UI — use [`azure-functions-openapi`](https://github.com/yeongseon/azure-functions-openapi)
+- Request/response validation beyond LangGraph contracts — use [`azure-functions-validation`](https://github.com/yeongseon/azure-functions-validation)
+- Generic graph-serving abstractions beyond LangGraph
+
+> **Note (v0.4.x):** This package still exposes `GET /api/openapi.json` for backward compatibility. This endpoint is deprecated and will move to the dedicated `azure-functions-openapi` package in v0.5.0.
 
 ## Installation
 
@@ -171,7 +180,7 @@ curl -X POST "https://<app>.azurewebsites.net/api/graphs/echo_agent/invoke?code=
 2. `POST /api/graphs/echo_agent/stream` — stream agent responses (buffered SSE)
 3. `GET /api/graphs/echo_agent/threads/{thread_id}/state` — inspect thread state
 4. `GET /api/health` — health check
-5. `GET /api/openapi.json` — OpenAPI specification
+5. `GET /api/openapi.json` — OpenAPI specification *(deprecated; moving to azure-functions-openapi in v0.5.0)*
 
 With `platform_compat=True`, you also get SDK-compatible endpoints:
 
@@ -209,6 +218,7 @@ With `platform_compat=True`, you also get SDK-compatible endpoints:
 
 Use Azure Blob Storage for checkpoint persistence and Azure Table Storage for thread metadata:
 
+```python
 from azure.storage.blob import ContainerClient
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
@@ -240,9 +250,6 @@ builder.add_edge("chat", END)
 graph = builder.compile(checkpointer=saver)
 
 # Deploy with Azure Table thread store
-thread_store = AzureTableThreadStore.from_connection_string(
-    "DefaultEndpointsProtocol=https;AccountName=...", table_name="threads"
-)
 thread_store = AzureTableThreadStore.from_connection_string(
     "DefaultEndpointsProtocol=https;AccountName=...", table_name="threads"
 )
@@ -279,16 +286,18 @@ v0.4.0 is fully backward-compatible with v0.3.0. No breaking changes.
 
 ## Ecosystem
 
-Part of the **Azure Functions Python DX Toolkit**:
+This package is part of the **Azure Functions Python DX Toolkit**.
+
+**Design principle:** `azure-functions-langgraph` owns LangGraph runtime exposure. `azure-functions-validation` owns validation. `azure-functions-openapi` owns API documentation.
 
 | Package | Role |
 |---------|------|
-| [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | Request and response validation |
-| [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI spec and Swagger UI |
+| **azure-functions-langgraph** | LangGraph deployment adapter for Azure Functions |
+| [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | Request/response validation and serialization |
+| [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI spec generation and Swagger UI |
 | [azure-functions-logging](https://github.com/yeongseon/azure-functions-logging) | Structured logging and observability |
 | [azure-functions-doctor](https://github.com/yeongseon/azure-functions-doctor) | Pre-deploy diagnostic CLI |
 | [azure-functions-scaffold](https://github.com/yeongseon/azure-functions-scaffold) | Project scaffolding |
-| **azure-functions-langgraph** | LangGraph agent deployment |
 | [azure-functions-durable-graph](https://github.com/yeongseon/azure-functions-durable-graph) | Manifest-first graph runtime with Durable Functions |
 | [azure-functions-python-cookbook](https://github.com/yeongseon/azure-functions-python-cookbook) | Recipes and examples |
 

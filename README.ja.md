@@ -12,22 +12,23 @@
 
 この文書の言語: [한국어](README.ko.md) | **日本語** | [简体中文](README.zh-CN.md) | [English](README.md)
 
-> **ベータ版について** — このパッケージは活発に開発中（`0.2.0`）です。コアAPIは安定化に向かっていますが、マイナーリリース間で変更される可能性があります。GitHubでイシューを報告してください。
+> **ベータ版について** — このパッケージは活発に開発中（`0.4.0`）です。コアAPIは安定化に向かっていますが、マイナーリリース間で変更される可能性があります。GitHubでイシューを報告してください。
 
-[LangGraph](https://github.com/langchain-ai/langgraph) エージェントを **Azure Functions** HTTPエンドポイントとしてボイラープレートなしでデプロイできます。
+最小限のボイラープレートで [LangGraph](https://github.com/langchain-ai/langgraph) グラフを **Azure Functions** HTTPエンドポイントとしてデプロイできます。
 
 ---
 
 **Azure Functions Python DX Toolkit** の一部
-→ Azure FunctionsにFastAPIレベルの開発者体験を提供
 
 ## なぜ必要か
 
-LangGraphエージェントをAzureにデプロイするのは、思ったより大変です:
+Azure FunctionsでLangGraphをデプロイするのは、思ったより大変です。
 
-- **Azureネイティブなデプロイ方法がない** — LangGraph PlatformはLangChainがホスティングしており、Azureではありません
-- **手動のHTTP接続** — `graph.invoke()` / `graph.stream()` をAzure Functionsと接続するには、繰り返しのボイラープレートコードが必要です
-- **標準パターンがない** — チームごとにコンパイル済みグラフのHTTPラッパーを独自に実装しています
+- LangGraphはAzure Functionsネイティブなデプロイアダプターを提供していません
+- コンパイル済みグラフをHTTPエンドポイントとして公開するには、繰り返しの接続コードが必要です
+- チームごとに同じinvoke/streamラッパーを毎回新たに実装しています
+
+このパッケージは、Azure Functions Python v2でLangGraphグラフをサーブするための専用アダプターを提供します。
 
 ## 主な機能
 
@@ -35,35 +36,62 @@ LangGraphエージェントをAzureにデプロイするのは、思ったより
 - **Invokeエンドポイント** — `POST /api/graphs/{name}/invoke` で同期実行
 - **Streamエンドポイント** — `POST /api/graphs/{name}/stream` でバッファリングされたSSEレスポンス
 - **Healthエンドポイント** — `GET /api/health` で登録済みグラフ一覧とチェックポインターの状態を確認
-- **プロトコルベース** — `invoke()` と `stream()` メソッドを持つ任意のオブジェクトで動作し、LangGraphに限定されません
 - **チェックポインター転送** — LangGraphネイティブのconfigによるスレッドベースの会話状態管理
-- **Stateエンドポイント** — `GET /api/graphs/{name}/threads/{thread_id}/state` でスレッド状況を検查（StatefulGraphのみ）
+- **Stateエンドポイント** — `GET /api/graphs/{name}/threads/{thread_id}/state` でスレッド状態を検査（サポートされている場合）
 - **グラフごとの認証** — `register(graph, name, auth_level=...)` でアプリレベルの認証をグラフごとにオーバーライド
-- **OpenAPIエンドポイント** — `GET /api/openapi.json` 自動生成APIスペック
+- **LangGraph Platform API互換** — スレッド、ラン、アシスタント、ステートのためのSDK互換エンドポイント (v0.3+)
+- **永続ストレージバックエンド** — Azure Blob Storageチェックポインター及びAzure Table Storageスレッドストア (v0.4+)
 
 ## LangGraph Platformとの比較
 
 | 機能 | LangGraph Platform | azure-functions-langgraph |
 |------|-------------------|--------------------------|
 | ホスティング | LangChain Cloud（有料） | ユーザーのAzureサブスクリプション |
-| Invoke | `POST /runs/stream` | `POST /api/graphs/{name}/invoke` |
-|| ストリーミング | True SSE | バッファリングSSE（v0.2） |
-| スレッド | 組み込み | LangGraphチェックポインター経由 |
+| アシスタント | 組み込み | SDK互換API (v0.3+) |
+| スレッドライフサイクル | 組み込み | 作成、取得、更新、削除、検索、カウント (v0.3+) |
+| ラン | 組み込み | スレッド付き + スレッドレスラン (v0.4+) |
+| ステート読み取り/更新 | 組み込み | get_state + update_state (v0.4+) |
+| ステート履歴 | 組み込み | フィルタリング対応チェックポイント履歴 (v0.4+) |
+| ストリーミング | True SSE | バッファリングSSE |
+| 永続ストレージ | 組み込み | Azure Blob + Table Storage (v0.4+) |
 | インフラ | マネージド | Azure Functions（サーバーレス） |
 | コストモデル | 使用量/シートベース | Azure Functions料金プラン |
 
 ## 対象範囲
 
 - Azure Functions Python **v2プログラミングモデル**
-- `LangGraphLike` プロトコルを満たす任意のグラフ（invoke + stream）
-- Pydantic v2ベースのリクエスト/レスポンスコントラクト
+- LangGraphグラフのデプロイとHTTP公開
+- LangGraphランタイムの関心事: invoke, stream, threads, runs, state
+- バリデーションとOpenAPIのためのコンパニオンパッケージ連携
 
 このパッケージは**デプロイアダプター**です — LangGraphをラップしますが、置き換えるものではありません。
+
+## このパッケージが行わないこと
+
+このパッケージは以下を担当しません:
+- OpenAPIドキュメント生成またはSwagger UI — [`azure-functions-openapi`](https://github.com/yeongseon/azure-functions-openapi)を使用
+- LangGraph契約外のリクエスト/レスポンスバリデーション — [`azure-functions-validation`](https://github.com/yeongseon/azure-functions-validation)を使用
+- LangGraph以外の汎用グラフサーブ抽象化
+
+> **注意 (v0.4.x):** このパッケージは後方互換性のため `GET /api/openapi.json` を引き続き提供しています。このエンドポイントはdeprecatedであり、v0.5.0で専用の `azure-functions-openapi` パッケージに移行されます。
 
 ## インストール
 
 ```bash
 pip install azure-functions-langgraph
+```
+
+Azureサービスによる永続ストレージ:
+
+```bash
+# Azure Blob Storageチェックポインター
+pip install azure-functions-langgraph[azure-blob]
+
+# Azure Table Storageスレッドストア
+pip install azure-functions-langgraph[azure-table]
+
+# 両方
+pip install azure-functions-langgraph[azure-blob,azure-table]
 ```
 
 Azure Functionsアプリには以下の依存関係も含めてください:
@@ -119,9 +147,9 @@ func_app = app.function_app  # ← Azure Functionsアプリとして使用
 
 1. `POST /api/graphs/echo_agent/invoke` — エージェントの呼び出し
 2. `POST /api/graphs/echo_agent/stream` — エージェントレスポンスのストリーミング（バッファリングSSE）
-3. `GET /api/graphs/echo_agent/threads/{thread_id}/state` — スレッド状況の検查
+3. `GET /api/graphs/echo_agent/threads/{thread_id}/state` — スレッド状態の検査
 4. `GET /api/health` — ヘルスチェック
-5. `GET /api/openapi.json` — OpenAPIスペック
+5. `GET /api/openapi.json` — OpenAPIスペック *(deprecated; v0.5.0でazure-functions-openapiに移行)*
 
 ### リクエスト形式
 
@@ -136,12 +164,21 @@ func_app = app.function_app  # ← Azure Functionsアプリとして使用
 }
 ```
 
+### v0.3.0からのアップグレード
+
+v0.4.0はv0.3.0と完全に後方互換です。ブレイキングチェンジはありません。
+
+- **新しいオプショナルextras**: `pip install azure-functions-langgraph[azure-blob,azure-table]`で永続ストレージ
+- **新しいプラットフォームエンドポイント**: スレッドCRUD、ステート更新/履歴、スレッドレスラン、アシスタントカウント
+- **新しいプロトコル**: `UpdatableStateGraph`, `StateHistoryGraph` (`azure_functions_langgraph.protocols`から利用可能)
+
 ## 使用に適したケース
 
 - LangGraphエージェントをAzure Functionsにデプロイしたい場合
 - LangGraph Platformのコストなしでサーバーレスデプロイが必要な場合
 - コンパイル済みグラフのHTTPエンドポイントを最小限の設定で必要とする場合
 - LangGraphチェックポインターによるスレッドベースの会話状態が必要な場合
+- Azure Blob/Table Storageによる永続的な状態保存が必要な場合
 
 ## ドキュメント
 
@@ -152,16 +189,18 @@ func_app = app.function_app  # ← Azure Functionsアプリとして使用
 
 ## エコシステム
 
-**Azure Functions Python DX Toolkit** の一部:
+このパッケージは **Azure Functions Python DX Toolkit** の一部です。
+
+**設計原則:** `azure-functions-langgraph`はLangGraphランタイム公開を担当。`azure-functions-validation`はバリデーションを担当。`azure-functions-openapi`はAPIドキュメントを担当。
 
 | パッケージ | 役割 |
 |-----------|------|
-| [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | リクエスト/レスポンスバリデーション |
-| [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI仕様とSwagger UI |
+| **azure-functions-langgraph** | Azure Functions用LangGraphデプロイアダプター |
+| [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | リクエスト/レスポンスバリデーションとシリアライゼーション |
+| [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI仕様生成とSwagger UI |
 | [azure-functions-logging](https://github.com/yeongseon/azure-functions-logging) | 構造化ロギングとオブザーバビリティ |
 | [azure-functions-doctor](https://github.com/yeongseon/azure-functions-doctor) | デプロイ前診断CLI |
 | [azure-functions-scaffold](https://github.com/yeongseon/azure-functions-scaffold) | プロジェクトスキャフォールディング |
-| **azure-functions-langgraph** | LangGraphエージェントのデプロイ |
 | [azure-functions-durable-graph](https://github.com/yeongseon/azure-functions-durable-graph) | Durable Functionsベースのマニフェストグラフランタイム |
 | [azure-functions-python-cookbook](https://github.com/yeongseon/azure-functions-python-cookbook) | レシピとサンプル |
 
