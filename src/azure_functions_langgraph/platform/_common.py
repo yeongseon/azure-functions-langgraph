@@ -14,6 +14,7 @@ from azure_functions_langgraph.platform.contracts import (
     ThreadState,
 )
 from azure_functions_langgraph.platform.stores import ThreadStore
+from azure_functions_langgraph.protocols import CloneableGraph
 
 logger = logging.getLogger(__name__)
 
@@ -67,21 +68,22 @@ def _get_threadless_graph(graph: Any) -> Any | None:
     so that threadless runs never persist orphaned state.  If the graph has
     no checkpointer, return it as-is.
 
-    If the graph has a checkpointer but no ``copy`` method, or ``copy()``
-    raises, return ``None`` - threadless runs are not safe for this graph.
+    The graph must satisfy the :class:`CloneableGraph` protocol (i.e. have a
+    ``copy(*, update)`` method).  If it does not, or ``copy()`` raises, return
+    ``None`` — threadless runs are not safe for this graph.
     """
     checkpointer = getattr(graph, "checkpointer", None)
     if checkpointer is None:
         return graph  # No checkpointer - safe as-is
     # Has checkpointer - try to disable it
-    copy_fn = getattr(graph, "copy", None)
-    if copy_fn is None:
+    if not isinstance(graph, CloneableGraph):
         logger.warning(
-            "Graph has checkpointer but no copy() method; threadless runs unavailable"
+            "Graph has checkpointer but does not satisfy CloneableGraph protocol; "
+            "threadless runs unavailable"
         )
-        return None  # Cannot disable checkpointer safely
+        return None
     try:
-        return copy_fn(update={"checkpointer": None})
+        return graph.copy(update={"checkpointer": None})
     except Exception:
         logger.warning(
             "Failed to clone graph with checkpointer disabled",
