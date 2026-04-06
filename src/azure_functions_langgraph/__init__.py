@@ -21,6 +21,7 @@ if TYPE_CHECKING:
         StreamRequest,
     )
     from azure_functions_langgraph.protocols import (
+        CloneableGraph,
         InvocableGraph,
         LangGraphLike,
         StatefulGraph,
@@ -98,6 +99,10 @@ def __getattr__(name: str) -> object:
         from azure_functions_langgraph.protocols import StatefulGraph
 
         return StatefulGraph
+    if name == "CloneableGraph":
+        from azure_functions_langgraph.protocols import CloneableGraph
+
+        return CloneableGraph
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -117,6 +122,7 @@ __all__ = [
     "RegisteredGraphMetadata",
     "RouteMetadata",
     # Protocols
+    "CloneableGraph",
     "InvocableGraph",
     "StreamableGraph",
     "LangGraphLike",

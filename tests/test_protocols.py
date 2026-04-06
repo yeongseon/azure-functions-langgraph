@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from azure_functions_langgraph.protocols import (
+    CloneableGraph,
     InvocableGraph,
     LangGraphLike,
     StatefulGraph,
@@ -44,3 +47,18 @@ class TestProtocols:
     def test_fake_graph_not_stateful(self) -> None:
         graph = FakeCompiledGraph()
         assert not isinstance(graph, StatefulGraph)
+
+    def test_copyable_graph_satisfies_cloneable(self) -> None:
+        class _Copyable:
+            def copy(self, *, update: dict[str, Any] | None = None) -> "_Copyable":
+                return _Copyable()
+
+        assert isinstance(_Copyable(), CloneableGraph)
+
+    def test_plain_object_not_cloneable(self) -> None:
+        assert not isinstance(object(), CloneableGraph)
+
+    def test_fake_compiled_graph_not_cloneable(self) -> None:
+        """FakeCompiledGraph has no copy() method — should NOT satisfy CloneableGraph."""
+        graph = FakeCompiledGraph()
+        assert not isinstance(graph, CloneableGraph)
