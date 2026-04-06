@@ -17,7 +17,7 @@ After deployment, your agent exposes:
 - **Platform-compatible routes** (opt-in) — `/api/threads`, `/api/runs/wait`, `/api/runs/stream`, and the full [LangGraph Platform API](https://langchain-ai.github.io/langgraph/cloud/reference/api/api_ref.html) surface
 
 The `simple_agent` example is a two-node greeting graph (`greet` → `farewell`) that does **not** call any LLM.
-If your own graph uses OpenAI or another provider, you will set those API keys in [Step 8](#step-8--configure-app-settings).
+If your own graph uses OpenAI or another provider, you will set those API keys in [Step 8](#step-8-configure-app-settings).
 
 ## Azure concepts you need for this guide
 
@@ -50,7 +50,7 @@ If your own graph uses OpenAI or another provider, you will set those API keys i
 | Azure Functions Core Tools v4 | `func --version` | [Install Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local#install-the-azure-functions-core-tools) |
 | Python 3.10–3.13 | `python --version` | [python.org](https://www.python.org/downloads/) |
 | `jq` (for JSON parsing in curl examples) | `jq --version` | [stedolan.github.io/jq](https://stedolan.github.io/jq/download/) |
-| Local example working | `func start` → `curl /api/health` returns OK | See [examples/simple_agent](../examples/simple_agent/) |
+| Local example working | `func start` → `curl /api/health` returns OK | See [examples/simple_agent](examples/simple_agent.md) |
 
 > ⚠️ **Verify locally first.** If your project doesn't work with `func start`, it won't work on Azure.
 
@@ -58,12 +58,12 @@ If your own graph uses OpenAI or another provider, you will set those API keys i
 
 1. **Storage account names must be globally unique** across all of Azure. Use a name like `stlanggraph` + a random suffix. Only lowercase letters and numbers, 3–24 characters.
 2. **Use one region for all resources.** Mixing regions adds latency and can cause failures.
-3. **Local `.env` values don't automatically appear on Azure.** You must set app settings separately via `az functionapp config appsettings set` (see [Step 8](#step-8--configure-app-settings)).
+3. **Local `.env` values don't automatically appear on Azure.** You must set app settings separately via `az functionapp config appsettings set` (see [Step 8](#step-8-configure-app-settings)).
 4. **First deploy takes longer than expected.** Azure runs a remote build to install your Python dependencies (including LangGraph, langchain-core, etc.). Wait for the "Deployment successful" message.
 5. **Deleting local files does not delete Azure resources.** You must explicitly delete the resource group to stop billing (see [Clean up resources](#clean-up-resources)).
 6. **LangGraph dependencies are large (~150+ MB).** Remote build times can be 2–5 minutes on first deploy. Premium plans use express build which is faster.
 7. **The `simple_agent` example does NOT need an LLM API key.** It uses a hardcoded greeting graph. Only set `OPENAI_API_KEY` if your own graph actually calls an LLM provider.
-8. **Platform-compatible routes require Azure Storage backends.** The threads API needs a blob container (checkpoints) and a table (thread metadata). These are created in [Step 7](#step-7--create-storage-backends-for-langgraph).
+8. **Platform-compatible routes require Azure Storage backends.** The threads API needs a blob container (checkpoints) and a table (thread metadata). These are created in [Step 7](#step-7-create-storage-backends-for-langgraph).
 
 ---
 
@@ -623,7 +623,7 @@ See [Choose an Azure Functions Hosting Plan](choose-a-plan.md) for complete per-
 
 ### Flex Consumption — for lowest cost
 
-Replace [Step 6](#step-6--create-azure-resources) plan and Function App creation with:
+Replace [Step 6](#step-6-create-azure-resources) plan and Function App creation with:
 
 ```bash
 # No separate plan needed — Flex Consumption is serverless
@@ -640,7 +640,7 @@ az functionapp create \
 
 ### Dedicated (B1) — for fixed monthly cost
 
-Replace [Step 6](#step-6--create-azure-resources) plan and Function App creation with:
+Replace [Step 6](#step-6-create-azure-resources) plan and Function App creation with:
 
 ```bash
 # Create the App Service plan
@@ -692,10 +692,10 @@ az functionapp create \
 |---|---|---|
 | `/api/health` returns 404 | Functions not registered | Check `func azure functionapp publish` output — should list `aflg_health` |
 | `/api/health` returns 500 | Missing `AZURE_STORAGE_CONNECTION_STRING` | Set it: `az functionapp config appsettings set --settings AZURE_STORAGE_CONNECTION_STRING="..."` |
-| `/api/threads` returns 500 | Blob container or table doesn't exist | Run [Step 7](#step-7--create-storage-backends-for-langgraph) commands |
+| `/api/threads` returns 500 | Blob container or table doesn't exist | Run [Step 7](#step-7-create-storage-backends-for-langgraph) commands |
 | Invoke returns `KeyError: OPENAI_API_KEY` | Your graph expects an LLM key | Set it via `az functionapp config appsettings set --settings OPENAI_API_KEY="sk-..."` |
 | Invoke returns correct data but streaming hangs | SSE connection interrupted | Check timeout settings; Premium is more reliable for streaming |
-| Thread state is empty after invoke | Using `compiled_graph` instead of `builder` | Import `builder` from `graph.py` and compile with `checkpointer` (see [Step 3](#step-3--modify-function_apppy-for-azure)) |
+| Thread state is empty after invoke | Using `compiled_graph` instead of `builder` | Import `builder` from `graph.py` and compile with `checkpointer` (see [Step 3](#step-3-modify-function_apppy-for-azure)) |
 
 ### Logs and monitoring
 

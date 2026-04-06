@@ -349,7 +349,7 @@ Use one of these patterns:
 
 ## See Also
 
-- [DESIGN.md](../DESIGN.md) — Key design decisions and constraints
+- [DESIGN.md](https://github.com/yeongseon/azure-functions-langgraph/blob/main/DESIGN.md) — Key design decisions and constraints
 - COMPATIBILITY.md — SDK version compatibility policy
 - [azure-functions-logging](https://github.com/yeongseon/azure-functions-logging) — Structured logging
 - [azure-functions-doctor](https://github.com/yeongseon/azure-functions-doctor) — Pre-deploy diagnostics
