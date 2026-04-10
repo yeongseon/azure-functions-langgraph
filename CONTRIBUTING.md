@@ -1,75 +1,78 @@
-# Contributing to Azure Functions LangGraph
+# Contributing Guide
 
-Thank you for your interest in contributing!
+We welcome contributions to the `azure-functions-langgraph` project.
 
-## Development Setup
+## Branch Strategy
 
-```bash
-git clone https://github.com/yeongseon/azure-functions-langgraph.git
-cd azure-functions-langgraph
-make install
-```
+Use GitHub Flow and branch from `main`.
 
-## Available Commands
+Recommended branch prefixes:
 
-```bash
-make test       # Run tests
-make lint       # Run linter + type checker
-make format     # Auto-format code
-make cov        # Run tests with coverage report
-make build      # Build distribution package
-make security   # Run Bandit security scanner
-make check-all  # Run all checks (lint + test + security)
-```
+- `feat/` for new features
+- `fix/` for bug fixes
+- `docs/` for documentation-only changes
+- `chore/` for tooling and maintenance
+- `ci/` for workflow updates
 
-## Code Style
+## Development Workflow
 
-- **Formatter**: Ruff
-- **Linter**: Ruff (E, F, I rules)
-- **Type Checker**: mypy (strict mode)
-- **Line Length**: 100 characters
+1. Create a branch from `main`.
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b feat/your-feature-name
+   ```
+2. Write code and tests.
+3. Run the local quality gate.
+   ```bash
+   make check-all
+   ```
+4. Push and create a pull request.
+   ```bash
+   git push origin feat/your-feature-name
+   ```
 
-## Testing
-
-- All new features must include tests
-- Maintain ≥ 80% code coverage
-- Use pytest with pytest-asyncio for async tests
-
-## Pull Request Process
-
-1. Create a feature branch from `main`
-2. Make your changes with tests
-3. Run `make check-all` to verify everything passes
-4. Submit a PR with a clear description
-
-## Commit Messages
-
-Follow conventional commits:
-
-```
-feat: add new feature
-fix: fix a bug
-docs: update documentation
-test: add or update tests
-build: update build configuration
-```
-
-## Release Process
-
-Releases are automated via GitHub Actions when a version tag is pushed:
+## Project Commands
 
 ```bash
-make release VERSION=x.y.z
+make format      # Format code with ruff
+make lint        # Lint with ruff
+make typecheck   # Type check with mypy
+make test        # Run tests
+make cov         # Run tests with coverage
+make check-all   # Run the full local gate
 ```
 
-## Documentation
+## Example Coverage Policy
 
-- Keep `README.md` synchronized with code changes
-- Update `PRD.md` when product requirements change
-- Update `DESIGN.md` when design decisions change
+Examples are part of the supported API experience and should stay verified.
 
-## Coverage Policy
+- Keep one representative example for the minimal LangGraph agent workflow.
+- Keep one complex example for multi-agent orchestration and state persistence.
+- Add or update smoke tests whenever an example changes.
+- Prefer lightweight smoke coverage over infrastructure-heavy end-to-end tests.
 
-- Target: ≥ 80% line coverage
-- New modules must meet the coverage floor
-- Coverage is enforced in CI via `fail_under = 80`
+## Commit Message Guidelines
+
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+
+### Examples
+
+```bash
+git commit -m "feat: add OpenAPI 3.1 support"
+git commit -m "fix: handle empty request body gracefully"
+git commit -m "docs: improve quickstart documentation"
+git commit -m "refactor: extract schema builder logic"
+git commit -m "chore: update dev dependencies"
+```
+
+Use imperative present tense and keep the message concise.
+
+## Deployment
+
+- A merge to `main` triggers the production deployment workflow.
+- Deployment status can be tracked from the related GitHub Actions run.
+
+## Code of Conduct
+
+Be respectful and inclusive. See our [Code of Conduct](CODE_OF_CONDUCT.md) for details.
