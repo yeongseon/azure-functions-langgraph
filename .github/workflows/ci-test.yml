@@ -59,13 +59,16 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install Hatch and dependencies via Makefile
+      - name: Install package and dev dependencies
         run: |
-          pip install hatch
-          make install
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,azure-blob,azure-table]"
 
       - name: Pin langgraph to minimum supported (1.0.0)
-        run: .venv/bin/pip install "langgraph==1.0.0"
+        run: pip install "langgraph==1.0.0"
+
+      - name: Show resolved versions
+        run: pip show langgraph langgraph-sdk | grep -E '^(Name|Version):'
 
       - name: Run tests against minimum langgraph
-        run: .venv/bin/pytest tests/ --no-cov -q
+        run: pytest tests/ --no-cov -q
