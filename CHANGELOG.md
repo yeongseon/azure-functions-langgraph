@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 ### 📚 Documentation
 
 - Document persistent storage scale envelope across all README locales (#143)
+- Expand `examples/` with `platform_compat_sdk`, `persistent_agent_blob_table`, `openapi_bridge`, `production_auth`, and `local_curl` (#144)
 
 ### ⚙️ Miscellaneous Tasks
 
