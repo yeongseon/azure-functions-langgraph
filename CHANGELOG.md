@@ -19,6 +19,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- Pin `langgraph` to `>=1.0,<2.0` and add a CI compatibility job for the minimum supported release; correct the stale `langgraph-sdk` row in `COMPATIBILITY.md` to match the runtime `>=0.3,<0.4` pin (#145)
 - Align config and docs with canonical DX Toolkit template (#128) 
 - *(deps)* Bump ruff from 0.15.8 to 0.15.10 (#124) 
 

@@ -24,7 +24,7 @@ classifiers = [
 
 dependencies = [
     "azure-functions",
-    "langgraph>=0.2",
+    "langgraph>=1.0,<2.0",
     "pydantic>=2.0,<3.0",
 ]
 

@@ -46,3 +46,26 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_RETRIES: 3
+
+  langgraph-min:
+    name: langgraph compat (min supported)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.10"
+
+      - name: Install Hatch and dependencies via Makefile
+        run: |
+          pip install hatch
+          make install
+
+      - name: Pin langgraph to minimum supported (1.0.0)
+        run: .venv/bin/pip install "langgraph==1.0.0"
+
+      - name: Run tests against minimum langgraph
+        run: .venv/bin/pytest tests/ --no-cov -q
