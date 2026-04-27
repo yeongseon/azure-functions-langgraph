@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import importlib
+import json
 import sys
 import types
 from typing import Any, cast
@@ -95,7 +96,10 @@ class MockTableClient:
             raise FakeResourceModifiedError(key[1])
         if mode == "merge":
             merged = deepcopy(stored)
-            merged.update(deepcopy(entity))
+            # Match real Azure Tables MERGE semantics: null-valued properties
+            # in the patch are silently ignored (they do NOT clear the field).
+            patch = {k: v for k, v in deepcopy(entity).items() if v is not None}
+            merged.update(patch)
             merged["etag"] = self._next_etag()
             self.entities[key] = merged
             return
@@ -323,11 +327,18 @@ def test_release_lock_no_etag() -> None:
     store, table_client = _new_store()
 
     thread = store.create()
+    acquired = store.try_acquire_run_lock(thread.thread_id, assistant_id="a")
+    assert acquired is not None
+    stored = table_client.entities[("thread", thread.thread_id)]
+    assert stored.get("lock_acquired_at") is not None
+
     store.release_run_lock(thread.thread_id, status="idle")
 
-    assert table_client.last_update_mode == "merge"
+    assert table_client.last_update_mode == "replace"
     assert table_client.last_update_kwargs["etag"] is None
     assert table_client.last_update_kwargs["match_condition"] is None
+    stored_after = table_client.entities[("thread", thread.thread_id)]
+    assert "lock_acquired_at" not in stored_after
 
 
 def test_release_lock_with_values_serializes_to_values_json() -> None:
@@ -963,3 +974,33 @@ def test_release_run_lock_clears_lock_acquired_at() -> None:
     store.release_run_lock(thread.thread_id, status="idle")
 
     assert table_client.entities[("thread", thread.thread_id)].get("lock_acquired_at") is None
+
+
+def test_release_run_lock_preserves_unrelated_fields() -> None:
+    store, table_client = _new_store()
+
+    thread = store.create(metadata={"user": "alice"})
+    assert store.try_acquire_run_lock(thread.thread_id, assistant_id="assistant-1") is not None
+
+    store.release_run_lock(thread.thread_id, status="idle")
+
+    stored = table_client.entities[("thread", thread.thread_id)]
+    assert stored.get("metadata_json") == json.dumps({"user": "alice"})
+    assert stored.get("assistant_id") == "assistant-1"
+    assert "lock_acquired_at" not in stored
+
+
+def test_reset_stale_locks_clears_lock_acquired_at() -> None:
+    store, table_client = _new_store()
+
+    thread = store.create()
+    assert store.try_acquire_run_lock(thread.thread_id) is not None
+    stored = table_client.entities[("thread", thread.thread_id)]
+    stored["lock_acquired_at"] = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    reset = store.reset_stale_locks(older_than_seconds=900)
+
+    assert reset == 1
+    after = table_client.entities[("thread", thread.thread_id)]
+    assert after.get("status") == "error"
+    assert "lock_acquired_at" not in after

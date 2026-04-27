@@ -39,7 +39,11 @@ func start
 ```
 
 You can deploy this side-by-side with the main app (same storage account, same
-table name) — it only writes to threads that are already orphaned.
+table name). The helper only resets threads whose lock has been held longer than
+`LANGGRAPH_STALE_LOCK_SECONDS` and uses ETag CAS to skip threads that another
+worker has just re-acquired. Set the threshold comfortably above your worst-case
+graph execution time so a legitimately long-running run is not reset out from
+under itself.
 
 ## Recovery status
 

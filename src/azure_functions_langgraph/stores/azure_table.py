@@ -527,18 +527,33 @@ class AzureTableThreadStore(ThreadStore):
         if status == "busy":
             raise ValueError("release_run_lock cannot set status to 'busy'")
         not_found_error = self._not_found_exception()
-        patch: dict[str, Any] = {
-            "PartitionKey": self._partition_key(),
-            "RowKey": thread_id,
-            "status": status,
-            "updated_at": self._now(),
-            "lock_acquired_at": None,
-        }
-        if values is not None:
-            patch["values_json"] = json.dumps(values, default=self._json_default)
-        self._warn_entity_size(patch, thread_id)
+        # Azure Tables MERGE silently ignores null-valued properties, so we
+        # cannot clear ``lock_acquired_at`` with ``mode="merge"``. Read the
+        # current entity, drop the lock field, and write back with
+        # ``mode="replace"`` so the property is actually removed.
         try:
-            self._table_client.update_entity(patch, mode="merge")
+            current = self._table_client.get_entity(
+                partition_key=self._partition_key(),
+                row_key=thread_id,
+            )
+        except not_found_error as exc:
+            raise KeyError(thread_id) from exc
+
+        replacement: dict[str, Any] = {
+            k: v
+            for k, v in dict(current).items()
+            if k not in {"etag", "lock_acquired_at"}
+            and not k.startswith("odata.")
+        }
+        replacement["PartitionKey"] = self._partition_key()
+        replacement["RowKey"] = thread_id
+        replacement["status"] = status
+        replacement["updated_at"] = self._now()
+        if values is not None:
+            replacement["values_json"] = json.dumps(values, default=self._json_default)
+        self._warn_entity_size(replacement, thread_id)
+        try:
+            self._table_client.update_entity(replacement, mode="replace")
         except not_found_error as exc:
             raise KeyError(thread_id) from exc
         merged = self._table_client.get_entity(
@@ -623,16 +638,19 @@ class AzureTableThreadStore(ThreadStore):
                 etag = fresh.get("etag") if isinstance(fresh, dict) else None
 
             patch: dict[str, Any] = {
-                "PartitionKey": self._partition_key(),
-                "RowKey": thread_id,
-                "status": status,
-                "updated_at": self._now(),
-                "lock_acquired_at": None,
+                k: v
+                for k, v in dict(fresh).items()
+                if k not in {"etag", "lock_acquired_at"}
+                and not k.startswith("odata.")
             }
+            patch["PartitionKey"] = self._partition_key()
+            patch["RowKey"] = thread_id
+            patch["status"] = status
+            patch["updated_at"] = self._now()
             try:
                 self._table_client.update_entity(
                     patch,
-                    mode="merge",
+                    mode="replace",
                     etag=etag,
                     match_condition=match_conditions.IfNotModified,
                 )
