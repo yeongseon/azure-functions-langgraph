@@ -855,3 +855,111 @@ def test_from_connection_string_does_not_leak_class_state(monkeypatch: Any) -> N
     # Constructing a new instance without not_found_error should still fail
     with pytest.raises(TypeError):
         AzureTableThreadStore(table_client=MockTableClient())
+
+
+def _backdate_lock(table_client: MockTableClient, thread_id: str, *, seconds: int) -> None:
+    key = ("thread", thread_id)
+    entity = table_client.entities[key]
+    entity["lock_acquired_at"] = datetime.now(timezone.utc) - timedelta(seconds=seconds)
+    entity["updated_at"] = entity["lock_acquired_at"]
+
+
+def test_reset_stale_locks_resets_old_busy_threads() -> None:
+    store, table_client = _new_store()
+
+    stale = store.create()
+    fresh = store.create()
+    idle = store.create()
+
+    assert store.try_acquire_run_lock(stale.thread_id) is not None
+    assert store.try_acquire_run_lock(fresh.thread_id) is not None
+
+    _backdate_lock(table_client, stale.thread_id, seconds=3600)
+
+    reset = store.reset_stale_locks(older_than_seconds=900)
+
+    assert reset == 1
+    refreshed_stale = store.get(stale.thread_id)
+    refreshed_fresh = store.get(fresh.thread_id)
+    refreshed_idle = store.get(idle.thread_id)
+    assert refreshed_stale is not None and refreshed_stale.status == "error"
+    assert refreshed_fresh is not None and refreshed_fresh.status == "busy"
+    assert refreshed_idle is not None and refreshed_idle.status == "idle"
+    assert table_client.entities[("thread", stale.thread_id)].get("lock_acquired_at") is None
+
+
+def test_reset_stale_locks_supports_idle_recovery_status() -> None:
+    store, table_client = _new_store()
+
+    thread = store.create()
+    assert store.try_acquire_run_lock(thread.thread_id) is not None
+    _backdate_lock(table_client, thread.thread_id, seconds=3600)
+
+    reset = store.reset_stale_locks(older_than_seconds=60, status="idle")
+
+    assert reset == 1
+    refreshed = store.get(thread.thread_id)
+    assert refreshed is not None and refreshed.status == "idle"
+
+
+def test_reset_stale_locks_skips_threads_within_threshold() -> None:
+    store, _ = _new_store()
+
+    thread = store.create()
+    assert store.try_acquire_run_lock(thread.thread_id) is not None
+
+    reset = store.reset_stale_locks(older_than_seconds=900)
+
+    assert reset == 0
+    refreshed = store.get(thread.thread_id)
+    assert refreshed is not None and refreshed.status == "busy"
+
+
+def test_reset_stale_locks_skips_concurrent_reacquire() -> None:
+    store, table_client = _new_store()
+
+    thread = store.create()
+    assert store.try_acquire_run_lock(thread.thread_id) is not None
+    _backdate_lock(table_client, thread.thread_id, seconds=3600)
+
+    table_client.always_modified_error = True
+    reset = store.reset_stale_locks(older_than_seconds=900)
+
+    assert reset == 0
+    refreshed = store.get(thread.thread_id)
+    assert refreshed is not None and refreshed.status == "busy"
+
+
+def test_reset_stale_locks_empty_store_returns_zero() -> None:
+    store, _ = _new_store()
+    assert store.reset_stale_locks(older_than_seconds=900) == 0
+
+
+def test_reset_stale_locks_validation() -> None:
+    store, _ = _new_store()
+    with pytest.raises(ValueError, match="non-negative"):
+        store.reset_stale_locks(older_than_seconds=-1)
+    with pytest.raises(ValueError, match="busy"):
+        store.reset_stale_locks(older_than_seconds=0, status="busy")
+
+
+def test_reset_stale_locks_skips_busy_thread_without_timestamp() -> None:
+    store, table_client = _new_store()
+
+    thread = store.create()
+    assert store.try_acquire_run_lock(thread.thread_id) is not None
+    table_client.entities[("thread", thread.thread_id)].pop("lock_acquired_at", None)
+
+    assert store.reset_stale_locks(older_than_seconds=0) == 0
+
+
+def test_release_run_lock_clears_lock_acquired_at() -> None:
+    store, table_client = _new_store()
+
+    thread = store.create()
+    assert store.try_acquire_run_lock(thread.thread_id) is not None
+    assert table_client.entities[("thread", thread.thread_id)].get("lock_acquired_at") is not None
+
+    store.release_run_lock(thread.thread_id, status="idle")
+
+    assert table_client.entities[("thread", thread.thread_id)].get("lock_acquired_at") is None

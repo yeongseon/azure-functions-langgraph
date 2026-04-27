@@ -396,6 +396,24 @@ The helpers do not hide `builder.compile(checkpointer=...)` and do not reimpleme
 | `create_sqlite_checkpointer` | local dev, single-instance prod | multi-process write contention | Use Postgres |
 | `create_postgres_checkpointer` | multi-instance Functions, existing Postgres infra | very high write QPS without read replicas | Add connection pooling / read replicas, or shard |
 
+#### Run lock semantics
+
+`AzureTableThreadStore` provides a per-thread run lock used by the platform-compat run endpoints to prevent concurrent execution on the same thread:
+
+- **Acquisition is atomic** — `try_acquire_run_lock()` uses Azure Table ETag compare-and-swap, so two concurrent acquirers cannot both win.
+- **Release is best-effort** — `release_run_lock()` does **not** use ETag concurrency. Failing to release a lock (leaving a thread permanently `busy`) is operationally worse than racing one, so the trade-off is made deliberately.
+- **Consequence** — if an Azure Functions instance is terminated mid-execution before the release path runs, the thread can remain stuck in `busy`.
+
+Schedule `reset_stale_locks()` from a Timer-triggered Function in production to reclaim such threads:
+
+```python
+# Reset locks held longer than 15 minutes; mark recovered threads as "error"
+# so an operator can audit them. Use status="idle" to make them immediately re-runnable.
+reset = thread_store.reset_stale_locks(older_than_seconds=900)
+```
+
+`reset_stale_locks()` re-checks each candidate with ETag CAS, so a thread that has just been re-acquired by another worker is skipped, never stomped. See [`examples/maintenance_timer`](examples/maintenance_timer/) for a complete Timer Trigger.
+
 ### Upgrading
 
 #### v0.3.0 → v0.4.0

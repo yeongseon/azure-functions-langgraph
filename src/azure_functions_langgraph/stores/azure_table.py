@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import importlib
 import json
 import logging
@@ -418,7 +418,22 @@ class AzureTableThreadStore(ThreadStore):
         *,
         assistant_id: str | None = None,
     ) -> Thread | None:
-        """Atomically acquire the per-thread run lock with ETag CAS."""
+        """Atomically acquire the per-thread run lock with ETag CAS.
+
+        Lock acquisition is **atomic**: it uses Azure Table ETag
+        compare-and-swap so two concurrent acquirers cannot both win.
+
+        Lock **release** (via :meth:`release_run_lock`) is intentionally
+        best-effort and does **not** use ETag concurrency. If a Function
+        instance is terminated mid-execution before reaching the release
+        path, the thread can remain in ``"busy"`` indefinitely.
+        Operators should run :meth:`reset_stale_locks` periodically (for
+        example from a Timer-triggered Function) to recover such threads.
+
+        Internally records ``lock_acquired_at`` on the entity so
+        :meth:`reset_stale_locks` can identify stale locks without
+        confusing them with recent metadata updates.
+        """
         not_found_error = self._not_found_exception()
         modified_error = self._modified_error
         match_conditions = self._match_conditions
@@ -458,6 +473,7 @@ class AzureTableThreadStore(ThreadStore):
                 "RowKey": thread_id,
                 "status": "busy",
                 "updated_at": now,
+                "lock_acquired_at": now,
             }
             if thread.assistant_id is None and assistant_id is not None:
                 patch["assistant_id"] = assistant_id
@@ -497,7 +513,17 @@ class AzureTableThreadStore(ThreadStore):
         status: ThreadStatus,
         values: dict[str, Any] | None = None,
     ) -> Thread:
-        """Release the per-thread run lock without ETag concurrency."""
+        """Release the per-thread run lock without ETag concurrency.
+
+        This is intentionally **best-effort**: it does not use ETag CAS,
+        because failing to release a lock (leaving a thread permanently
+        ``"busy"``) is operationally worse than racing one. The trade-off
+        is that an Azure Functions instance terminated mid-execution can
+        leave a thread stuck in ``"busy"``.
+
+        Schedule :meth:`reset_stale_locks` from a Timer Trigger to
+        reclaim such threads in production.
+        """
         if status == "busy":
             raise ValueError("release_run_lock cannot set status to 'busy'")
         not_found_error = self._not_found_exception()
@@ -506,6 +532,7 @@ class AzureTableThreadStore(ThreadStore):
             "RowKey": thread_id,
             "status": status,
             "updated_at": self._now(),
+            "lock_acquired_at": None,
         }
         if values is not None:
             patch["values_json"] = json.dumps(values, default=self._json_default)
@@ -519,6 +546,101 @@ class AzureTableThreadStore(ThreadStore):
             row_key=thread_id,
         )
         return self._entity_to_thread(merged)
+
+    def reset_stale_locks(
+        self,
+        *,
+        older_than_seconds: int,
+        status: ThreadStatus = "error",
+    ) -> int:
+        """Reset run locks held longer than ``older_than_seconds``.
+
+        Lists threads currently in ``"busy"`` status whose
+        ``lock_acquired_at`` is older than the threshold and resets each
+        one to ``status`` (``"error"`` by default; ``"idle"`` to make
+        them immediately re-runnable). Uses ETag CAS per-thread, so a
+        thread that has just been re-acquired by another worker is
+        skipped, never stomped.
+
+        Schedule from a Timer-triggered Function (e.g. every 5 minutes
+        with ``older_than_seconds=900``) to recover threads orphaned by
+        Function host terminations during graph execution.
+
+        Returns the number of threads actually reset.
+        """
+        if older_than_seconds < 0:
+            raise ValueError(
+                f"older_than_seconds must be non-negative, got {older_than_seconds}"
+            )
+        if status == "busy":
+            raise ValueError("reset_stale_locks cannot set status to 'busy'")
+
+        not_found_error = self._not_found_exception()
+        modified_error = self._modified_error
+        match_conditions = self._match_conditions
+
+        cutoff = self._now() - timedelta(seconds=older_than_seconds)
+        pk = self._partition_key().replace("'", "''")
+        query_filter = f"PartitionKey eq '{pk}' and status eq 'busy'"
+        candidates = list(self._table_client.query_entities(query_filter=query_filter))
+
+        reset_count = 0
+        for candidate in candidates:
+            thread_id = str(candidate["RowKey"])
+            lock_acquired_at = candidate.get("lock_acquired_at")
+            if lock_acquired_at is None:
+                continue
+            normalized = self._normalize_datetime(cast(datetime, lock_acquired_at))
+            if normalized > cutoff:
+                continue
+
+            try:
+                fresh = self._table_client.get_entity(
+                    partition_key=self._partition_key(),
+                    row_key=thread_id,
+                )
+            except not_found_error:
+                continue
+
+            if fresh.get("status") != "busy":
+                continue
+            fresh_lock_acquired_at = fresh.get("lock_acquired_at")
+            if fresh_lock_acquired_at is None:
+                continue
+            fresh_normalized = self._normalize_datetime(
+                cast(datetime, fresh_lock_acquired_at)
+            )
+            if fresh_normalized > cutoff:
+                continue
+
+            entity_metadata = getattr(fresh, "metadata", None)
+            etag = (
+                entity_metadata.get("etag")
+                if isinstance(entity_metadata, Mapping)
+                else None
+            )
+            if etag is None:
+                etag = fresh.get("etag") if isinstance(fresh, dict) else None
+
+            patch: dict[str, Any] = {
+                "PartitionKey": self._partition_key(),
+                "RowKey": thread_id,
+                "status": status,
+                "updated_at": self._now(),
+                "lock_acquired_at": None,
+            }
+            try:
+                self._table_client.update_entity(
+                    patch,
+                    mode="merge",
+                    etag=etag,
+                    match_condition=match_conditions.IfNotModified,
+                )
+            except (modified_error, not_found_error):
+                continue
+            reset_count += 1
+
+        return reset_count
 
     def search(
         self,
