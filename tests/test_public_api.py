@@ -132,3 +132,12 @@ def test_openapi_bridge_importable() -> None:
     from azure_functions_langgraph.openapi import register_with_openapi
 
     assert register_with_openapi is not None
+
+
+def test_azure_table_thread_store_from_table_client_factory() -> None:
+    from azure_functions_langgraph.stores.azure_table import AzureTableThreadStore
+
+    assert hasattr(AzureTableThreadStore, "from_table_client")
+    assert callable(AzureTableThreadStore.from_table_client)
+    assert hasattr(AzureTableThreadStore, "from_connection_string")
+    assert callable(AzureTableThreadStore.from_connection_string)

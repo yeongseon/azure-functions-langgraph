@@ -104,13 +104,20 @@ class AzureTableThreadStore(ThreadStore):
         )
 
     @classmethod
-    def from_table_client(cls, table_client: Any) -> AzureTableThreadStore:
+    def from_table_client(
+        cls, table_client: _TableClientProtocol
+    ) -> AzureTableThreadStore:
         """Wrap a pre-built ``azure.data.tables.TableClient``.
 
         Use this when you build the ``TableClient`` yourself — for
         example with ``DefaultAzureCredential`` for Managed Identity
         deployments — so application code does not need to import or
         know about ``azure.core.exceptions`` or ``MatchConditions``.
+
+        The target table must already exist; this factory does not
+        attempt to create it. Pre-create the table out-of-band (for
+        example with ``TableClient.create_table()`` or via your
+        deployment pipeline) before wiring it into the store.
 
         Example
         -------
@@ -126,33 +133,31 @@ class AzureTableThreadStore(ThreadStore):
             )
             store = AzureTableThreadStore.from_table_client(client)
         """
-        _, not_found_error, modified_error, match_conditions_cls = (
-            cls._load_azure_sdk_symbols()
+        not_found_error, modified_error, match_conditions_cls = (
+            cls._load_azure_core_symbols()
         )
         return cls(
-            table_client=cast(_TableClientProtocol, table_client),
+            table_client=table_client,
             not_found_error=not_found_error,
             modified_error=modified_error,
             match_conditions=match_conditions_cls,
         )
 
     @staticmethod
-    def _load_azure_sdk_symbols() -> tuple[Any, type[BaseException], type[BaseException], Any]:
+    def _load_azure_core_symbols() -> tuple[type[BaseException], type[BaseException], Any]:
+        # Loads only the azure.core symbols the store needs at runtime
+        # (exception classes + MatchConditions). Deliberately does NOT
+        # import azure.data.tables.TableClient so that from_table_client()
+        # can decouple application code from the TableClient import path
+        # (e.g. DefaultAzureCredential users who construct TableClient
+        # themselves).
         try:
-            tables_module = importlib.import_module("azure.data.tables")
             exceptions_module = importlib.import_module("azure.core.exceptions")
         except ImportError as exc:
             raise ImportError(
-                "AzureTableThreadStore requires optional dependency 'azure-data-tables'. "
+                "AzureTableThreadStore requires optional dependency 'azure-core'. "
                 "Install with: pip install azure-functions-langgraph[azure-table]"
             ) from exc
-
-        table_client_class = getattr(tables_module, "TableClient", None)
-        if table_client_class is None:
-            raise ImportError(
-                "azure.data.tables.TableClient not found. "
-                "Install with: pip install azure-functions-langgraph[azure-table]"
-            )
 
         resource_not_found_error = getattr(exceptions_module, "ResourceNotFoundError", None)
         if resource_not_found_error is None:
@@ -176,9 +181,35 @@ class AzureTableThreadStore(ThreadStore):
             )
 
         return (
-            table_client_class,
             cast(type[BaseException], resource_not_found_error),
             cast(type[BaseException], resource_modified_error),
+            match_conditions_cls,
+        )
+
+    @staticmethod
+    def _load_azure_sdk_symbols() -> tuple[Any, type[BaseException], type[BaseException], Any]:
+        try:
+            tables_module = importlib.import_module("azure.data.tables")
+        except ImportError as exc:
+            raise ImportError(
+                "AzureTableThreadStore requires optional dependency 'azure-data-tables'. "
+                "Install with: pip install azure-functions-langgraph[azure-table]"
+            ) from exc
+
+        table_client_class = getattr(tables_module, "TableClient", None)
+        if table_client_class is None:
+            raise ImportError(
+                "azure.data.tables.TableClient not found. "
+                "Install with: pip install azure-functions-langgraph[azure-table]"
+            )
+
+        not_found_error, modified_error, match_conditions_cls = (
+            AzureTableThreadStore._load_azure_core_symbols()
+        )
+        return (
+            table_client_class,
+            not_found_error,
+            modified_error,
             match_conditions_cls,
         )
 
