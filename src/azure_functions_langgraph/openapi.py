@@ -1,4 +1,4 @@
-"""Bridge between azure-functions-langgraph-python and azure-functions-openapi-python.
+"""Bridge between azure-functions-langgraph and azure-functions-openapi-python.
 
 This module forwards route metadata from :class:`LangGraphApp` to the
 ``azure-functions-openapi-python`` package for OpenAPI spec generation.

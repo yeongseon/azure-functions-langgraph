@@ -1,5 +1,5 @@
 [project]
-name = "azure-functions-langgraph-python"
+name = "azure-functions-langgraph"
 description = "LangGraph integration for Azure Functions Python v2 — deploy compiled graphs as HTTP endpoints"
 keywords = ["azure-functions", "azure", "python", "langgraph", "langchain", "ai-agent", "llm", "serverless"]
 authors = [{ name = "Yeongseon Choe", email = "yeongseon.choe@gmail.com" }]

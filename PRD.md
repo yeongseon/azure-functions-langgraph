@@ -10,7 +10,7 @@ LangGraph is the most popular framework for building stateful AI agents with LLM
 
 ## Solution
 
-`azure-functions-langgraph-python` provides a thin integration layer that wraps any compiled LangGraph graph into Azure Functions HTTP endpoints with zero boilerplate.
+`azure-functions-langgraph` provides a thin integration layer that wraps any compiled LangGraph graph into Azure Functions HTTP endpoints with zero boilerplate.
 
 ## Target Users
 

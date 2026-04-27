@@ -15,7 +15,7 @@ pip install azure-functions langgraph
 Or install everything at once:
 
 ```bash
-pip install azure-functions-langgraph-python
+pip install azure-functions-langgraph
 ```
 
 ### TypeError: Graph must have an invoke() method

@@ -1,10 +1,10 @@
-# azure-functions-langgraph-python — Full LLM Reference
+# azure-functions-langgraph — Full LLM Reference
 
 > Deploy LangGraph agents as Azure Functions with zero boilerplate.
 
 ## Package Info
 
-- PyPI: `pip install azure-functions-langgraph-python`
+- PyPI: `pip install azure-functions-langgraph`
 - Version: 0.5.0
 - Python: >=3.10, <3.15
 - License: MIT
@@ -15,13 +15,13 @@
 ## Installation
 
 ```bash
-pip install azure-functions-langgraph-python
+pip install azure-functions-langgraph
 ```
 
 Optional extras:
 ```bash
-pip install azure-functions-langgraph-python[azure-blob]   # Azure Blob checkpointer
-pip install azure-functions-langgraph-python[azure-table]   # Azure Table thread store
+pip install azure-functions-langgraph[azure-blob]   # Azure Blob checkpointer
+pip install azure-functions-langgraph[azure-table]   # Azure Table thread store
 ```
 
 ## Public API

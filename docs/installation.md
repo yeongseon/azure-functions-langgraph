@@ -9,7 +9,7 @@
 ## Install from PyPI
 
 ```bash
-pip install azure-functions-langgraph-python
+pip install azure-functions-langgraph
 ```
 
 This installs the package along with its dependencies:
@@ -25,7 +25,7 @@ In your Azure Functions project, add to `requirements.txt`:
 ```text
 azure-functions
 langgraph
-azure-functions-langgraph-python
+azure-functions-langgraph
 ```
 
 Or if using `pyproject.toml`:
@@ -34,7 +34,7 @@ Or if using `pyproject.toml`:
 dependencies = [
     "azure-functions",
     "langgraph",
-    "azure-functions-langgraph-python",
+    "azure-functions-langgraph",
 ]
 ```
 
@@ -44,7 +44,7 @@ Clone the repository and install with development dependencies:
 
 ```bash
 git clone https://github.com/yeongseon/azure-functions-langgraph-python.git
-cd azure-functions-langgraph-python
+cd azure-functions-langgraph
 make install
 ```
 

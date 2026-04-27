@@ -1,11 +1,11 @@
 # Azure Functions LangGraph
 
-[![PyPI](https://img.shields.io/pypi/v/azure-functions-langgraph-python.svg)](https://pypi.org/project/azure-functions-langgraph-python/)
-[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-langgraph-python/)
+[![PyPI](https://img.shields.io/pypi/v/azure-functions-langgraph.svg)](https://pypi.org/project/azure-functions-langgraph/)
+[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-langgraph/)
 [![CI](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/ci-test.yml)
 [![Release](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/publish-pypi.yml)
 [![Security Scans](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/security.yml/badge.svg)](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/security.yml)
-[![codecov](https://codecov.io/gh/yeongseon/azure-functions-langgraph-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-langgraph-python)
+[![codecov](https://codecov.io/gh/yeongseon/azure-functions-langgraph/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-langgraph)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
 [![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-langgraph-python/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -44,7 +44,7 @@
 
 ## 与 LangGraph Platform 对比
 
-| 功能 | LangGraph Platform | azure-functions-langgraph-python |
+| 功能 | LangGraph Platform | azure-functions-langgraph |
 |------|-------------------|--------------------------|
 | 托管 | LangChain Cloud（付费） | 您的 Azure 订阅 |
 | 助手 | 内置 | SDK 兼容 API (v0.3+) |
@@ -82,20 +82,20 @@
 ## 安装
 
 ```bash
-pip install azure-functions-langgraph-python
+pip install azure-functions-langgraph
 ```
 
 Azure 服务持久存储：
 
 ```bash
 # Azure Blob Storage 检查点器
-pip install azure-functions-langgraph-python[azure-blob]
+pip install azure-functions-langgraph[azure-blob]
 
 # Azure Table Storage 线程存储
-pip install azure-functions-langgraph-python[azure-table]
+pip install azure-functions-langgraph[azure-table]
 
 # 两者都要
-pip install azure-functions-langgraph-python[azure-blob,azure-table]
+pip install azure-functions-langgraph[azure-blob,azure-table]
 ```
 
 您的 Azure Functions 应用还需要包含以下依赖：
@@ -103,14 +103,14 @@ pip install azure-functions-langgraph-python[azure-blob,azure-table]
 ```text
 azure-functions
 langgraph
-azure-functions-langgraph-python
+azure-functions-langgraph
 ```
 
 本地开发安装：
 
 ```bash
 git clone https://github.com/yeongseon/azure-functions-langgraph-python.git
-cd azure-functions-langgraph-python
+cd azure-functions-langgraph
 pip install -e .[dev]
 ```
 
@@ -313,7 +313,7 @@ saver.delete_checkpoints_before(
 
 v0.4.0 与 v0.3.0 完全向后兼容。无破坏性变更。
 
-- **新的可选 extras**：`pip install azure-functions-langgraph-python[azure-blob,azure-table]` 用于持久存储
+- **新的可选 extras**：`pip install azure-functions-langgraph[azure-blob,azure-table]` 用于持久存储
 - **新的平台端点**：线程 CRUD、状态更新/历史、无线程运行、助手计数
 - **新的协议**：`UpdatableStateGraph`、`StateHistoryGraph`（从 `azure_functions_langgraph.protocols` 可用）
 
@@ -336,11 +336,11 @@ v0.4.0 与 v0.3.0 完全向后兼容。无破坏性变更。
 
 本软件包是 **Azure Functions Python DX Toolkit** 的一部分。
 
-**设计原则：** `azure-functions-langgraph-python` 负责 LangGraph 运行时公开。`azure-functions-validation-python` 负责验证。`azure-functions-openapi-python` 负责 API 文档。
+**设计原则：** `azure-functions-langgraph` 负责 LangGraph 运行时公开。`azure-functions-validation-python` 负责验证。`azure-functions-openapi-python` 负责 API 文档。
 
 | 软件包 | 用途 |
 |--------|------|
-| **azure-functions-langgraph-python** | Azure Functions 用 LangGraph 部署适配器 |
+| **azure-functions-langgraph** | Azure Functions 用 LangGraph 部署适配器 |
 | [azure-functions-validation-python](https://github.com/yeongseon/azure-functions-validation-python) | 请求/响应验证和序列化 |
 | [azure-functions-openapi-python](https://github.com/yeongseon/azure-functions-openapi-python) | OpenAPI 规范生成和 Swagger UI |
 | [azure-functions-logging-python](https://github.com/yeongseon/azure-functions-logging-python) | 结构化日志和可观测性 |

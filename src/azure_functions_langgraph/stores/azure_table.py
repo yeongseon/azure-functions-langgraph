@@ -94,27 +94,27 @@ class AzureTableThreadStore(ThreadStore):
         except ImportError as exc:
             raise ImportError(
                 "AzureTableThreadStore requires optional dependency 'azure-data-tables'. "
-                "Install with: pip install azure-functions-langgraph-python[azure-table]"
+                "Install with: pip install azure-functions-langgraph[azure-table]"
             ) from exc
 
         table_client_class = getattr(tables_module, "TableClient", None)
         if table_client_class is None:
             raise ImportError(
                 "azure.data.tables.TableClient not found. "
-                "Install with: pip install azure-functions-langgraph-python[azure-table]"
+                "Install with: pip install azure-functions-langgraph[azure-table]"
             )
 
         resource_not_found_error = getattr(exceptions_module, "ResourceNotFoundError", None)
         if resource_not_found_error is None:
             raise ImportError(
                 "azure.core.exceptions.ResourceNotFoundError not found. "
-                "Install with: pip install azure-functions-langgraph-python[azure-table]"
+                "Install with: pip install azure-functions-langgraph[azure-table]"
             )
         resource_modified_error = getattr(exceptions_module, "ResourceModifiedError", None)
         if resource_modified_error is None:
             raise ImportError(
                 "azure.core.exceptions.ResourceModifiedError not found. "
-                "Install with: pip install azure-functions-langgraph-python[azure-table]"
+                "Install with: pip install azure-functions-langgraph[azure-table]"
             )
 
         azure_core_module = importlib.import_module("azure.core")
@@ -122,7 +122,7 @@ class AzureTableThreadStore(ThreadStore):
         if match_conditions_cls is None:
             raise ImportError(
                 "azure.core.MatchConditions not found. "
-                "Install with: pip install azure-functions-langgraph-python[azure-table]"
+                "Install with: pip install azure-functions-langgraph[azure-table]"
             )
 
         resolved_not_found_error = cast(type[BaseException], resource_not_found_error)

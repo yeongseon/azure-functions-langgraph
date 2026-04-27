@@ -1,10 +1,10 @@
-# azure-functions-langgraph-python
+# azure-functions-langgraph
 
 > Deploy LangGraph agents as Azure Functions with zero boilerplate.
 
 ## Package Info
 
-- PyPI: `pip install azure-functions-langgraph-python`
+- PyPI: `pip install azure-functions-langgraph`
 - Version: 0.5.0
 - Python: >=3.10, <3.15
 - License: MIT

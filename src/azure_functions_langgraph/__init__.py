@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 
 if TYPE_CHECKING:
     from azure_functions_langgraph.app import LangGraphApp, get_langgraph_metadata
@@ -38,7 +38,7 @@ def __getattr__(name: str) -> object:
         except ImportError as exc:
             raise ImportError(
                 "LangGraphApp requires 'azure-functions' and 'langgraph'. "
-                "Install them with: pip install azure-functions-langgraph-python"
+                "Install them with: pip install azure-functions-langgraph"
             ) from exc
     # Contracts
     if name == "InvokeRequest":

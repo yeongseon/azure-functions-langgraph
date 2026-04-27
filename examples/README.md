@@ -1,6 +1,6 @@
 # Examples
 
-`azure-functions-langgraph-python` keeps a growing set of smoke-tested examples. Each example is a standalone Azure Functions app — see the README in each directory for local setup instructions.
+`azure-functions-langgraph` keeps a growing set of smoke-tested examples. Each example is a standalone Azure Functions app — see the README in each directory for local setup instructions.
 
 | Role | Path | Description |
 | --- | --- | --- |

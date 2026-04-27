@@ -1,11 +1,11 @@
 # Azure Functions LangGraph
 
-[![PyPI](https://img.shields.io/pypi/v/azure-functions-langgraph-python.svg)](https://pypi.org/project/azure-functions-langgraph-python/)
-[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-langgraph-python/)
+[![PyPI](https://img.shields.io/pypi/v/azure-functions-langgraph.svg)](https://pypi.org/project/azure-functions-langgraph/)
+[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-langgraph/)
 [![CI](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/ci-test.yml)
 [![Release](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/publish-pypi.yml)
 [![Security Scans](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/security.yml/badge.svg)](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/security.yml)
-[![codecov](https://codecov.io/gh/yeongseon/azure-functions-langgraph-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-langgraph-python)
+[![codecov](https://codecov.io/gh/yeongseon/azure-functions-langgraph/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-langgraph)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
 [![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-langgraph-python/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -44,7 +44,7 @@ Azure Functions에서 LangGraph를 배포하는 것은 생각보다 어렵습니
 
 ## LangGraph Platform 비교
 
-| 기능 | LangGraph Platform | azure-functions-langgraph-python |
+| 기능 | LangGraph Platform | azure-functions-langgraph |
 |------|-------------------|--------------------------|
 | 호스팅 | LangChain Cloud (유료) | 사용자의 Azure 구독 |
 | 어시스턴트 | 내장 | SDK 호환 API (v0.3+) |
@@ -82,20 +82,20 @@ Azure Functions에서 LangGraph를 배포하는 것은 생각보다 어렵습니
 ## 설치
 
 ```bash
-pip install azure-functions-langgraph-python
+pip install azure-functions-langgraph
 ```
 
 Azure 서비스를 이용한 영구 스토리지:
 
 ```bash
 # Azure Blob Storage 체크포인터
-pip install azure-functions-langgraph-python[azure-blob]
+pip install azure-functions-langgraph[azure-blob]
 
 # Azure Table Storage 스레드 스토어
-pip install azure-functions-langgraph-python[azure-table]
+pip install azure-functions-langgraph[azure-table]
 
 # 둘 다
-pip install azure-functions-langgraph-python[azure-blob,azure-table]
+pip install azure-functions-langgraph[azure-blob,azure-table]
 ```
 
 Azure Functions 앱에 다음 의존성도 포함해야 합니다:
@@ -103,14 +103,14 @@ Azure Functions 앱에 다음 의존성도 포함해야 합니다:
 ```text
 azure-functions
 langgraph
-azure-functions-langgraph-python
+azure-functions-langgraph
 ```
 
 로컬 개발 설치:
 
 ```bash
 git clone https://github.com/yeongseon/azure-functions-langgraph-python.git
-cd azure-functions-langgraph-python
+cd azure-functions-langgraph
 pip install -e .[dev]
 ```
 
@@ -313,7 +313,7 @@ saver.delete_checkpoints_before(
 
 v0.4.0은 v0.3.0과 완전히 하위 호환됩니다. 브레이킹 체인지가 없습니다.
 
-- **새로운 선택적 extras**: `pip install azure-functions-langgraph-python[azure-blob,azure-table]`로 영구 스토리지
+- **새로운 선택적 extras**: `pip install azure-functions-langgraph[azure-blob,azure-table]`로 영구 스토리지
 - **새로운 플랫폼 엔드포인트**: 스레드 CRUD, 상태 수정/히스토리, 스레드리스 실행, 어시스턴트 카운트
 - **새로운 프로토콜**: `UpdatableStateGraph`, `StateHistoryGraph` (`azure_functions_langgraph.protocols`에서 사용 가능)
 
@@ -336,11 +336,11 @@ v0.4.0은 v0.3.0과 완전히 하위 호환됩니다. 브레이킹 체인지가 
 
 이 패키지는 **Azure Functions Python DX Toolkit**의 일부입니다.
 
-**설계 원칙:** `azure-functions-langgraph-python`는 LangGraph 런타임 노출을 담당합니다. `azure-functions-validation-python`은 검증을 담당합니다. `azure-functions-openapi-python`는 API 문서화를 담당합니다.
+**설계 원칙:** `azure-functions-langgraph`는 LangGraph 런타임 노출을 담당합니다. `azure-functions-validation-python`은 검증을 담당합니다. `azure-functions-openapi-python`는 API 문서화를 담당합니다.
 
 | 패키지 | 역할 |
 |--------|------|
-| **azure-functions-langgraph-python** | Azure Functions용 LangGraph 배포 어댑터 |
+| **azure-functions-langgraph** | Azure Functions용 LangGraph 배포 어댑터 |
 | [azure-functions-validation-python](https://github.com/yeongseon/azure-functions-validation-python) | 요청/응답 검증 및 직렬화 |
 | [azure-functions-openapi-python](https://github.com/yeongseon/azure-functions-openapi-python) | OpenAPI 스펙 생성 및 Swagger UI |
 | [azure-functions-logging-python](https://github.com/yeongseon/azure-functions-logging-python) | 구조화된 로깅 및 관측성 |

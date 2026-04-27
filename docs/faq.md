@@ -36,7 +36,7 @@ The library passes `config` directly to `graph.invoke()` or `graph.stream()`. Th
 
 The `LangGraphApp` class uses a lazy import. You can `import azure_functions_langgraph` without `langgraph` installed — the `ImportError` only occurs when you access `LangGraphApp` without the required dependencies.
 
-However, `langgraph` is listed as a dependency and will be installed automatically with `pip install azure-functions-langgraph-python`.
+However, `langgraph` is listed as a dependency and will be installed automatically with `pip install azure-functions-langgraph`.
 
 ## Can I use this with any graph, not just LangGraph?
 
@@ -76,7 +76,7 @@ app = LangGraphApp(auth_level=func.AuthLevel.FUNCTION)
 
 ## How is this different from LangGraph Platform?
 
-| Feature | LangGraph Platform | azure-functions-langgraph-python |
+| Feature | LangGraph Platform | azure-functions-langgraph |
 |---------|-------------------|--------------------------|
 | Hosting | LangChain Cloud (paid) | Your Azure subscription |
 | Streaming | True SSE | Buffered SSE (v0.2) |

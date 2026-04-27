@@ -1,6 +1,6 @@
 # Release Process
 
-This document outlines the steps to release a new version of **azure-functions-langgraph-python** to PyPI and update the changelog using the existing Makefile and Hatch-based workflows.
+This document outlines the steps to release a new version of **azure-functions-langgraph** to PyPI and update the changelog using the existing Makefile and Hatch-based workflows.
 
 ---
 
@@ -95,7 +95,7 @@ make publish-test
 To install from TestPyPI:
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ azure-functions-langgraph-python
+pip install --index-url https://test.pypi.org/simple/ azure-functions-langgraph
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 ## Overview
 
-`azure-functions-langgraph-python` is a thin deployment adapter. It bridges LangGraph compiled graphs and Azure Functions HTTP endpoints without adding intermediate abstractions.
+`azure-functions-langgraph` is a thin deployment adapter. It bridges LangGraph compiled graphs and Azure Functions HTTP endpoints without adding intermediate abstractions.
 
 ```mermaid
 flowchart TB
@@ -182,7 +182,7 @@ The core module. Contains:
 
 ### `openapi.py` *(v0.5+)*
 
-Bridge module between `azure-functions-langgraph-python` and `azure-functions-openapi-python`:
+Bridge module between `azure-functions-langgraph` and `azure-functions-openapi-python`:
 
 - `register_with_openapi(app)` — reads `app.get_app_metadata()` and calls `register_openapi_metadata()` for each route.
 - `_validate_model()` — ensures model arguments are Pydantic `BaseModel` subclasses.
@@ -246,13 +246,13 @@ LangGraph Platform API compatibility layer (v0.3+):
 
 Persistent checkpoint storage (v0.4+):
 
-- `azure_blob.py` — `AzureBlobCheckpointSaver` (optional extra: `azure-functions-langgraph-python[azure-blob]`). Stores checkpoints as blob hierarchies: `{thread_id}/{checkpoint_ns}/{checkpoint_id}/checkpoint.bin`.
+- `azure_blob.py` — `AzureBlobCheckpointSaver` (optional extra: `azure-functions-langgraph[azure-blob]`). Stores checkpoints as blob hierarchies: `{thread_id}/{checkpoint_ns}/{checkpoint_id}/checkpoint.bin`.
 
 ### `stores/`
 
 Persistent thread storage (v0.4+):
 
-- `azure_table.py` — `AzureTableThreadStore` (optional extra: `azure-functions-langgraph-python[azure-table]`). Single-partition design with client-side filtering.
+- `azure_table.py` — `AzureTableThreadStore` (optional extra: `azure-functions-langgraph[azure-table]`). Single-partition design with client-side filtering.
 
 ## Public API Boundary
 

@@ -1,6 +1,6 @@
 # Production Guide
 
-This guide focuses on production hardening for `azure-functions-langgraph-python` deployments on Azure Functions.
+This guide focuses on production hardening for `azure-functions-langgraph` deployments on Azure Functions.
 
 ## Authentication & Authorization
 ### Default auth behavior
@@ -280,7 +280,7 @@ This removes most race windows and aligns with current storage assumptions.
 Install optional dependency:
 
 ```bash
-pip install azure-functions-langgraph-python[azure-blob]
+pip install azure-functions-langgraph[azure-blob]
 ```
 
 Configure with connection string from environment and construct a container client:
@@ -307,7 +307,7 @@ If you already manage Azure clients elsewhere, pass a prepared container client 
 Install optional dependency:
 
 ```bash
-pip install azure-functions-langgraph-python[azure-table]
+pip install azure-functions-langgraph[azure-table]
 ```
 
 Configure with connection string and table name:

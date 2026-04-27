@@ -1,6 +1,6 @@
 # Contributing Guidelines
 
-Thank you for your interest in contributing to `azure-functions-langgraph-python`.
+Thank you for your interest in contributing to `azure-functions-langgraph`.
 
 For complete contributing guidelines, please see the [CONTRIBUTING.md](https://github.com/yeongseon/azure-functions-langgraph-python/blob/main/CONTRIBUTING.md) file in the repository root.
 
@@ -10,7 +10,7 @@ For complete contributing guidelines, please see the [CONTRIBUTING.md](https://g
 
 ```bash
 git clone https://github.com/yeongseon/azure-functions-langgraph-python.git
-cd azure-functions-langgraph-python
+cd azure-functions-langgraph
 make install
 ```
 

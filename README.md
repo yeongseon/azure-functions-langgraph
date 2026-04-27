@@ -1,11 +1,11 @@
 # Azure Functions LangGraph
 
-[![PyPI](https://img.shields.io/pypi/v/azure-functions-langgraph-python.svg)](https://pypi.org/project/azure-functions-langgraph-python/)
-[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-langgraph-python/)
+[![PyPI](https://img.shields.io/pypi/v/azure-functions-langgraph.svg)](https://pypi.org/project/azure-functions-langgraph/)
+[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-langgraph/)
 [![CI](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/ci-test.yml)
 [![Release](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/publish-pypi.yml)
 [![Security Scans](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/security.yml/badge.svg)](https://github.com/yeongseon/azure-functions-langgraph-python/actions/workflows/security.yml)
-[![codecov](https://codecov.io/gh/yeongseon/azure-functions-langgraph-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-langgraph-python)
+[![codecov](https://codecov.io/gh/yeongseon/azure-functions-langgraph/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-langgraph)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
 [![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-langgraph-python/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -44,7 +44,7 @@ This package provides a focused adapter for serving LangGraph graphs on Azure Fu
 
 ## LangGraph Platform comparison
 
-| Feature | LangGraph Platform | azure-functions-langgraph-python |
+| Feature | LangGraph Platform | azure-functions-langgraph |
 |---------|-------------------|--------------------------|
 | Hosting | LangChain Cloud (paid) | Your Azure subscription |
 | Assistants | Built-in | SDK-compatible API (v0.3+) |
@@ -82,20 +82,20 @@ This package does not own:
 ## Installation
 
 ```bash
-pip install azure-functions-langgraph-python
+pip install azure-functions-langgraph
 ```
 
 For persistent storage with Azure services:
 
 ```bash
 # Azure Blob Storage checkpointer
-pip install azure-functions-langgraph-python[azure-blob]
+pip install azure-functions-langgraph[azure-blob]
 
 # Azure Table Storage thread store
-pip install azure-functions-langgraph-python[azure-table]
+pip install azure-functions-langgraph[azure-table]
 
 # Both
-pip install azure-functions-langgraph-python[azure-blob,azure-table]
+pip install azure-functions-langgraph[azure-blob,azure-table]
 ```
 
 Your Azure Functions app should also include:
@@ -103,14 +103,14 @@ Your Azure Functions app should also include:
 ```text
 azure-functions
 langgraph
-azure-functions-langgraph-python
+azure-functions-langgraph
 ```
 
 For local development:
 
 ```bash
 git clone https://github.com/yeongseon/azure-functions-langgraph-python.git
-cd azure-functions-langgraph-python
+cd azure-functions-langgraph
 pip install -e .[dev]
 ```
 
@@ -355,7 +355,7 @@ Both helpers preserve channel value blobs and the `latest.json` pointer, so reta
 
 Fully backward-compatible. No breaking changes.
 
-- **New optional extras**: `pip install azure-functions-langgraph-python[azure-blob,azure-table]` for persistent storage
+- **New optional extras**: `pip install azure-functions-langgraph[azure-blob,azure-table]` for persistent storage
 - **New platform endpoints**: thread CRUD, state update/history, threadless runs, assistants count
 - **New protocols**: `UpdatableStateGraph`, `StateHistoryGraph` (available from `azure_functions_langgraph.protocols`)
 
@@ -386,14 +386,14 @@ Fully backward-compatible. No breaking changes.
 
 This package is part of the **Azure Functions Python DX Toolkit**.
 
-**Design principle:** `azure-functions-langgraph-python` owns LangGraph runtime exposure. `azure-functions-validation-python` owns validation. `azure-functions-openapi-python` owns API documentation.
+**Design principle:** `azure-functions-langgraph` owns LangGraph runtime exposure. `azure-functions-validation-python` owns validation. `azure-functions-openapi-python` owns API documentation.
 
 | Package | Role |
 |---------|------|
 | [azure-functions-openapi-python](https://github.com/yeongseon/azure-functions-openapi-python) | OpenAPI spec generation and Swagger UI |
 | [azure-functions-validation-python](https://github.com/yeongseon/azure-functions-validation-python) | Request/response validation and serialization |
 | [azure-functions-db-python](https://github.com/yeongseon/azure-functions-db-python) | Database bindings for SQL, PostgreSQL, MySQL, SQLite, and Cosmos DB |
-| **azure-functions-langgraph-python** | LangGraph deployment adapter for Azure Functions |
+| **azure-functions-langgraph** | LangGraph deployment adapter for Azure Functions |
 | [azure-functions-scaffold-python](https://github.com/yeongseon/azure-functions-scaffold-python) | Project scaffolding CLI |
 | [azure-functions-logging-python](https://github.com/yeongseon/azure-functions-logging-python) | Structured logging and observability |
 | [azure-functions-doctor-python](https://github.com/yeongseon/azure-functions-doctor-python) | Pre-deploy diagnostic CLI |
