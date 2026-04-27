@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+### 🐛 Bug Fixes
+
+- *(packaging)* Rename PyPI distribution back to azure-functions-langgraph 
+
 ### ⚙️ Miscellaneous Tasks
 
 - *(deps)* Pin langgraph to >=1.0,<2.0 with min-version CI compat job (#145) (#152) 
@@ -17,6 +21,7 @@ All notable changes to this project will be documented in this file.
 
 ### 📚 Documentation
 
+- Update changelog 
 - *(examples)* Add platform-SDK, persistent storage, OpenAPI, auth, and curl examples (#144) (#151) 
 - Add per-feature SDK compatibility matrix (#141) (#148) 
 - Clarify buffered SSE behavior for all stream endpoints (#147) 
