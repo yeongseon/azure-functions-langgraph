@@ -113,7 +113,11 @@ langgraph_app.thread_store = thread_store
 langgraph_app.register(
     graph=compiled_graph,
     name="managed_identity_agent",
-    description="Echo agent persisted via DefaultAzureCredential (Managed Identity in prod, AzureCliCredential in dev).",
+    description=(
+        "Echo agent persisted via Azure Storage using a connection string for "
+        "Azurite/local dev, or DefaultAzureCredential for Managed Identity in prod "
+        "and Azure CLI-backed credentials when running locally against Azure."
+    ),
 )
 
 app = langgraph_app.function_app
