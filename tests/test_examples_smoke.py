@@ -14,6 +14,7 @@ GRAPH_EXAMPLES: tuple[tuple[str, str], ...] = (
     ("openapi_bridge", "compiled_graph"),
     ("production_auth", "private_graph"),
     ("production_auth", "public_graph"),
+    ("managed_identity_storage", "compiled_graph"),
 )
 
 
@@ -57,6 +58,7 @@ EXAMPLE_DIRS = (
     "simple_agent",
     "platform_compat_sdk",
     "persistent_agent_blob_table",
+    "managed_identity_storage",
     "openapi_bridge",
     "production_auth",
 )
