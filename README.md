@@ -409,7 +409,30 @@ saver.delete_checkpoints_before(
 
 Both helpers only delete checkpoint marker, metadata, and write blobs. They intentionally preserve channel value blobs (under `values/`) and the `latest.json` pointer so retained checkpoints remain fully usable.
 
-> **Note** — These helpers are safe but **not exhaustive**. Channel value blobs that were referenced *only* by the now-deleted checkpoints become orphaned and are not removed. For long-running threads with frequent checkpointing, those orphans can dominate the storage footprint over time. Full value-blob garbage collection is tracked in [#153](https://github.com/yeongseon/azure-functions-langgraph-python/issues/153) as a candidate opt-in helper.
+> **Note** — `delete_old_checkpoints` / `delete_checkpoints_before` are safe but **not exhaustive**. Channel value blobs that were referenced *only* by the now-deleted checkpoints become orphaned and are not removed. For long-running threads with frequent checkpointing, those orphans can dominate the storage footprint over time. Run `collect_orphaned_values()` (below) on a schedule as the second step.
+
+#### Garbage-collecting orphaned channel values
+
+After pruning checkpoints, `collect_orphaned_values()` walks the surviving checkpoints, builds the set of `(channel, version)` pairs they reference, and removes any `values/` blob outside that set. Default is **dry-run** so you can audit first:
+
+```python
+# Dry run — see what would be deleted, change nothing
+audit = saver.collect_orphaned_values(thread_id="conversation-1")
+print(audit.would_delete)
+
+# Real run — actually delete orphans
+result = saver.collect_orphaned_values(thread_id="conversation-1", dry_run=False)
+print(f"Deleted {len(result.deleted)} orphaned value blobs")
+```
+
+The helper is concurrency-safe by two complementary mechanisms:
+
+1. **Recent-write grace period** — value blobs whose `last_modified` is within `grace_period_seconds` (default **300s**) are deferred to a future GC pass and recorded in `result.skipped_recent`. This protects the window between a value blob being uploaded and its checkpoint commit marker (`latest.json`) being finalized.
+2. **Per-orphan re-scan** — immediately before each delete, the survivor set is recomputed; an *older* value blob that a newly finalized checkpoint started referencing after the snapshot is preserved (such blobs appear in `would_delete` but not `deleted`).
+
+Per namespace, the helper **fails closed** — if `latest.json` is missing **or** any surviving checkpoint blob is unreadable / fails deserialization, the namespace is skipped entirely (recorded in `result.skipped_namespaces`) so a misconfigured or transiently-unavailable store cannot trigger destructive deletion.
+
+Set `grace_period_seconds=0` to disable the recent-write guard during an offline maintenance window when no concurrent checkpoint writes are possible.
 
 #### DB checkpointer backends
 
