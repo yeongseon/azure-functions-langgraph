@@ -12,7 +12,7 @@ permissions:
 jobs:
   cosmos-integration:
     runs-on: ubuntu-latest
-    continue-on-error: true
+    continue-on-error: true  # experimental: Cosmos Linux emulator can be flaky on GitHub-hosted runners
     services:
       cosmos-emulator:
         image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator

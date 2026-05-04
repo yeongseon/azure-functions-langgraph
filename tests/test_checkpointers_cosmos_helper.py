@@ -437,7 +437,7 @@ def test_close_cosmos_checkpointer_calls_exit(monkeypatch: Any) -> None:
 
 
 def test_close_cosmos_checkpointer_idempotent(monkeypatch: Any) -> None:
-    """Second call to close_cosmos_checkpointer is a no-op (raises TypeError)."""
+    """Second call to close_cosmos_checkpointer is a silent no-op."""
     _install_fake_cosmos(monkeypatch)
     _install_fake_azure_identity(monkeypatch)
 
@@ -451,10 +451,8 @@ def test_close_cosmos_checkpointer_idempotent(monkeypatch: Any) -> None:
     )
 
     module.close_cosmos_checkpointer(saver)
-    # Second call should raise TypeError since _langgraph_cm is gone
-    with pytest.raises(TypeError, match="_langgraph_cm"):
-        module.close_cosmos_checkpointer(saver)
-
+    # Second call is a no-op — must not raise
+    module.close_cosmos_checkpointer(saver)
 
 def test_close_cosmos_checkpointer_rejects_non_helper_saver(monkeypatch: Any) -> None:
     """close_cosmos_checkpointer rejects savers not created by create_cosmos_checkpointer."""
