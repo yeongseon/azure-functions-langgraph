@@ -85,6 +85,12 @@ test: ensure-hatch
 	@echo "Running tests..."
 	@$(HATCH) run test
 
+.PHONY: test-cosmos
+test-cosmos: ensure-hatch
+	docker compose -f docker-compose.cosmos.yml up -d --wait
+	COSMOS_EMULATOR_ENDPOINT=https://localhost:8081 hatch run pytest -v -m integration tests/integration/ --no-cov || true
+	docker compose -f docker-compose.cosmos.yml down
+
 .PHONY: cov
 cov: ensure-hatch
 	@$(HATCH) run cov

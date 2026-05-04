@@ -1,0 +1,46 @@
+name: Cosmos Integration
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  cosmos-integration:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      cosmos-emulator:
+        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator
+        ports:
+          - 8081:8081
+          - 10250-10255:10250-10255
+        options: >-
+          --health-cmd "curl -fk https://localhost:8081/_explorer/emulator.pem"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,cosmos]"
+
+      - name: Run cosmos integration tests
+        env:
+          COSMOS_EMULATOR_ENDPOINT: https://localhost:8081
+          COSMOS_DISABLE_SSL: "true"
+        run: pytest -v -m integration tests/integration/ --no-cov
