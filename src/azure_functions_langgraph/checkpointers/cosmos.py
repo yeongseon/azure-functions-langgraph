@@ -150,8 +150,6 @@ def create_cosmos_checkpointer(
             os.environ["COSMOSDB_ENDPOINT"] = endpoint
             os.environ["COSMOSDB_KEY"] = resolved_key
             saver = CosmosDBSaverCls(
-                endpoint=endpoint,
-                key=resolved_key,
                 database_name=database_name,
                 container_name=container_name,
             )

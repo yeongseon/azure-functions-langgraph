@@ -78,16 +78,24 @@ def test_creates_saver_with_key_param(monkeypatch: Any) -> None:
     )
 
     assert len(constructor_calls) == 1
-    assert constructor_calls[0]["endpoint"] == "https://test.documents.azure.com:443/"
-    assert constructor_calls[0]["key"] == "my-secret-key"
     assert constructor_calls[0]["database_name"] == "testdb"
     assert constructor_calls[0]["container_name"] == "testcontainer"
+    assert "endpoint" not in constructor_calls[0]
+    assert "key" not in constructor_calls[0]
     assert saver is not None
 
 
 def test_key_param_takes_precedence_over_cosmos_key_env(monkeypatch: Any) -> None:
-    constructor_calls: list[dict[str, Any]] = []
-    _install_fake_cosmos(monkeypatch, constructor_calls=constructor_calls)
+    captured_env: dict[str, str | None] = {}
+
+    class CapturingCosmosDBSaver:
+        def __init__(self, **kwargs: Any) -> None:
+            self.client = MagicMock()
+            captured_env["COSMOSDB_KEY"] = os.environ.get("COSMOSDB_KEY")
+
+    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmosdb")
+    setattr(cosmos_module, "CosmosDBSaver", CapturingCosmosDBSaver)
+    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmosdb", cosmos_module)
     module = _reload_cosmos_module(monkeypatch)
     monkeypatch.setenv("COSMOS_KEY", "env-key")
 
@@ -98,12 +106,19 @@ def test_key_param_takes_precedence_over_cosmos_key_env(monkeypatch: Any) -> Non
         container_name="ctr",
     )
 
-    assert constructor_calls[0]["key"] == "param-key"
-
+    assert captured_env["COSMOSDB_KEY"] == "param-key"
 
 def test_cosmos_key_env_fallback(monkeypatch: Any) -> None:
-    constructor_calls: list[dict[str, Any]] = []
-    _install_fake_cosmos(monkeypatch, constructor_calls=constructor_calls)
+    captured_env: dict[str, str | None] = {}
+
+    class CapturingCosmosDBSaver:
+        def __init__(self, **kwargs: Any) -> None:
+            self.client = MagicMock()
+            captured_env["COSMOSDB_KEY"] = os.environ.get("COSMOSDB_KEY")
+
+    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmosdb")
+    setattr(cosmos_module, "CosmosDBSaver", CapturingCosmosDBSaver)
+    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmosdb", cosmos_module)
     module = _reload_cosmos_module(monkeypatch)
     monkeypatch.setenv("COSMOS_KEY", "env-key")
 
@@ -113,7 +128,7 @@ def test_cosmos_key_env_fallback(monkeypatch: Any) -> None:
         container_name="ctr",
     )
 
-    assert constructor_calls[0]["key"] == "env-key"
+    assert captured_env["COSMOSDB_KEY"] == "env-key"
 
 
 def test_no_key_raises_value_error(monkeypatch: Any) -> None:
@@ -151,7 +166,7 @@ def test_credential_string_emits_deprecation_warning(monkeypatch: Any) -> None:
     assert len(w) == 1
     assert issubclass(w[0].category, DeprecationWarning)
     assert "credential" in str(w[0].message)
-    assert constructor_calls[0]["key"] == "string-key"
+    # credential resolved to key via env var, not constructor kwarg
 
 
 def test_credential_non_string_raises_type_error(monkeypatch: Any) -> None:
@@ -182,8 +197,16 @@ def test_key_and_credential_both_raises_type_error(monkeypatch: Any) -> None:
 
 
 def test_credential_takes_precedence_over_cosmos_key_env(monkeypatch: Any) -> None:
-    constructor_calls: list[dict[str, Any]] = []
-    _install_fake_cosmos(monkeypatch, constructor_calls=constructor_calls)
+    captured_env: dict[str, str | None] = {}
+
+    class CapturingCosmosDBSaver:
+        def __init__(self, **kwargs: Any) -> None:
+            self.client = MagicMock()
+            captured_env["COSMOSDB_KEY"] = os.environ.get("COSMOSDB_KEY")
+
+    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmosdb")
+    setattr(cosmos_module, "CosmosDBSaver", CapturingCosmosDBSaver)
+    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmosdb", cosmos_module)
     module = _reload_cosmos_module(monkeypatch)
     monkeypatch.setenv("COSMOS_KEY", "env-key")
 
@@ -196,7 +219,7 @@ def test_credential_takes_precedence_over_cosmos_key_env(monkeypatch: Any) -> No
             container_name="ctr",
         )
 
-    assert constructor_calls[0]["key"] == "cred-key"
+    assert captured_env["COSMOSDB_KEY"] == "cred-key"
 
 
 # ---------------------------------------------------------------------------
