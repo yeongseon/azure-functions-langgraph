@@ -32,7 +32,7 @@ def _install_fake_cosmos(
     constructor_calls: list[dict[str, Any]] | None = None,
     omit_cosmos_saver: bool = False,
 ) -> None:
-    """Inject fake ``langgraph_checkpoint_cosmos`` into ``sys.modules``."""
+    """Inject fake ``langgraph_checkpoint_cosmosdb`` into ``sys.modules``."""
     captured = constructor_calls if constructor_calls is not None else []
 
     class FakeCosmosDBSaverClass:
@@ -43,11 +43,11 @@ def _install_fake_cosmos(
             self.kwargs = kwargs
             self.client = MagicMock()
 
-    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmos")
+    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmosdb")
     if not omit_cosmos_saver:
         setattr(cosmos_module, "CosmosDBSaver", FakeCosmosDBSaverClass)
 
-    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmos", cosmos_module)
+    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmosdb", cosmos_module)
 
 
 def _reload_cosmos_module(monkeypatch: Any) -> Any:
@@ -215,9 +215,9 @@ def test_env_vars_set_during_creation(monkeypatch: Any) -> None:
             captured_env["COSMOSDB_ENDPOINT"] = os.environ.get("COSMOSDB_ENDPOINT")
             captured_env["COSMOSDB_KEY"] = os.environ.get("COSMOSDB_KEY")
 
-    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmos")
+    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmosdb")
     setattr(cosmos_module, "CosmosDBSaver", CapturingCosmosDBSaver)
-    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmos", cosmos_module)
+    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmosdb", cosmos_module)
     module = _reload_cosmos_module(monkeypatch)
 
     module.create_cosmos_checkpointer(
@@ -274,9 +274,9 @@ def test_env_vars_restored_on_exception(monkeypatch: Any) -> None:
         def __init__(self, **kwargs: Any) -> None:
             raise RuntimeError("creation failed")
 
-    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmos")
+    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmosdb")
     setattr(cosmos_module, "CosmosDBSaver", FailingCosmosDBSaver)
-    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmos", cosmos_module)
+    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmosdb", cosmos_module)
     module = _reload_cosmos_module(monkeypatch)
     monkeypatch.setenv("COSMOSDB_ENDPOINT", "orig-ep")
     monkeypatch.setenv("COSMOSDB_KEY", "orig-key")
@@ -346,9 +346,9 @@ def test_close_works_without_client_attr(monkeypatch: Any) -> None:
         def __init__(self, **kwargs: Any) -> None:
             pass
 
-    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmos")
+    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmosdb")
     setattr(cosmos_module, "CosmosDBSaver", NoClientSaver)
-    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmos", cosmos_module)
+    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmosdb", cosmos_module)
     module = _reload_cosmos_module(monkeypatch)
 
     saver = module.create_cosmos_checkpointer(
@@ -392,9 +392,9 @@ def test_marker_fallback_when_weakref_fails(monkeypatch: Any) -> None:
             self.kwargs = kwargs
             self.client = MagicMock()
 
-    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmos")
+    cosmos_module = types.ModuleType("langgraph_checkpoint_cosmosdb")
     setattr(cosmos_module, "CosmosDBSaver", SlottedSaver)
-    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmos", cosmos_module)
+    monkeypatch.setitem(sys.modules, "langgraph_checkpoint_cosmosdb", cosmos_module)
     module = _reload_cosmos_module(monkeypatch)
 
     # SlottedSaver can't be weakly referenced, so we expect marker fallback
@@ -426,7 +426,7 @@ def test_missing_cosmos_package_raises_helpful_error(monkeypatch: Any) -> None:
     real_import_module = importlib.import_module
 
     def fake_import_module(name: str) -> Any:
-        if name == "langgraph_checkpoint_cosmos":
+        if name == "langgraph_checkpoint_cosmosdb":
             raise ImportError("missing")
         return real_import_module(name)
 

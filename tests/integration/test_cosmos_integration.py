@@ -6,7 +6,7 @@ from typing import Callable, Protocol, TypedDict, cast
 
 import pytest
 
-pytest.importorskip("langgraph_checkpoint_cosmos")
+pytest.importorskip("langgraph_checkpoint_cosmosdb")
 
 cosmos_helper_module = importlib.import_module("azure_functions_langgraph.checkpointers.cosmos")
 create_cosmos_checkpointer = cast(

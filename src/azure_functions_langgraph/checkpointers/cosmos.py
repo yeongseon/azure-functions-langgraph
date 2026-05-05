@@ -33,7 +33,7 @@ import weakref
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from langgraph_checkpoint_cosmos import CosmosDBSaver
+    from langgraph_checkpoint_cosmosdb import CosmosDBSaver
 
 
 _EXTRA_HINT = (
@@ -91,7 +91,7 @@ def create_cosmos_checkpointer(
         TypeError: If ``key`` and ``credential`` are both provided, or if
             ``credential`` is not a string.
         ValueError: If no key can be resolved from parameters or environment.
-        ImportError: If ``langgraph-checkpoint-cosmos`` is not installed.
+        ImportError: If ``langgraph-checkpoint-cosmosdb`` is not installed.
             Install via the ``cosmos`` extra.
     """
     global _USE_MARKER_FALLBACK  # noqa: PLW0603
@@ -131,15 +131,15 @@ def create_cosmos_checkpointer(
 
     # --- Import upstream ---
     try:
-        cosmos_module = importlib.import_module("langgraph_checkpoint_cosmos")
+        cosmos_module = importlib.import_module("langgraph_checkpoint_cosmosdb")
     except ImportError as exc:
         raise ImportError(_EXTRA_HINT) from exc
 
     CosmosDBSaverCls = getattr(cosmos_module, "CosmosDBSaver", None)
     if CosmosDBSaverCls is None:
         raise ImportError(
-            "langgraph_checkpoint_cosmos is missing CosmosDBSaver; "
-            "upgrade langgraph-checkpoint-cosmos to >=0.2."
+            "langgraph_checkpoint_cosmosdb is missing CosmosDBSaver; "
+            "upgrade langgraph-checkpoint-cosmosdb to >=0.2."
         )
 
     # --- Env var wiring (thread-safe) ---
