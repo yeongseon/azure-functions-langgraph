@@ -4,12 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.7.0
+
 ### ✨ Features
 
+- *(checkpointers)* Add `create_cosmos_checkpointer` DX helper for Cosmos DB (#169)
+- *(checkpointers)* Add `close_cosmos_checkpointer` cleanup helper for Cosmos DB lifecycle management
+- *(checkpointers)* Add safe garbage collection for orphaned Azure Blob channel values (#153) (#160)
 - *(stores)* Add `reset_stale_locks()` to `AzureTableThreadStore` for recovering orphaned run locks (#157)
+
+### 📚 Documentation
+
 - *(docs)* Document best-effort lock release and run lock semantics in README
 - *(examples)* Add `maintenance_timer` example for periodic stale lock recovery
-
 
 ## 0.6.0
 ### 🐛 Bug Fixes
