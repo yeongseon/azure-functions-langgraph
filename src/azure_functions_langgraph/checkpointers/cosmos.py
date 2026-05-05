@@ -139,7 +139,7 @@ def create_cosmos_checkpointer(
     if CosmosDBSaverCls is None:
         raise ImportError(
             "langgraph_checkpoint_cosmosdb is missing CosmosDBSaver; "
-            "upgrade langgraph-checkpoint-cosmosdb to >=0.2."
+            "upgrade langgraph-checkpoint-cosmosdb to >=0.2.0,<0.3."
         )
 
     # --- Env var wiring (thread-safe) ---
