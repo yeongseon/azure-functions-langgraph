@@ -2761,10 +2761,8 @@ class TestStreamSSEWireFormat:
             thread_id=thread.thread_id,
         )
         resp = fn(req)
-        parts = _decode_sse_body(resp.get_body().decode())
+        _parts = _decode_sse_body(resp.get_body().decode())
 
-        # Skip metadata (idx 0) and end (last)
-        data_parts = parts[1:-1]
 
 
 class TestCoverageBoostRunsThreads:

@@ -6,9 +6,9 @@ import importlib
 import os
 import sys
 import types
-import warnings
 from typing import Any, cast
 from unittest.mock import MagicMock
+import warnings
 
 pytest = cast(Any, importlib.import_module("pytest"))
 
