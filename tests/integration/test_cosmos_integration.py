@@ -87,18 +87,17 @@ def _create_saver(target: tuple[str, str, str, str]) -> CheckpointSaver:
         CheckpointSaver,
         create_cosmos_checkpointer(
             endpoint=endpoint,
-            credential=key,
+            key=key,
             database_name=database_name,
             container_name=container_name,
         ),
     )
 
-
 def test_create_cosmos_checkpointer_creates_saver(
     cosmos_emulator_target: tuple[str, str, str, str],
 ) -> None:
     saver = _create_saver(cosmos_emulator_target)
-    assert hasattr(saver, "_langgraph_cm")
+    assert saver is not None
     close_cosmos_checkpointer(saver)
 
 
@@ -107,7 +106,7 @@ def test_close_cosmos_checkpointer_cleans_up(
 ) -> None:
     saver = _create_saver(cosmos_emulator_target)
     close_cosmos_checkpointer(saver)
-    assert not hasattr(saver, "_langgraph_cm")
+    assert getattr(saver, "_cosmos_helper_closed", False) is True
 
 
 def test_checkpoint_round_trip_put_get_tuple(
@@ -135,15 +134,20 @@ def test_list_checkpoints_returns_expected_results(
     close_cosmos_checkpointer(saver)
 
 
-def test_python_310_guard_raises_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    module = cast(object, importlib.import_module("azure_functions_langgraph.checkpointers.cosmos"))
-    module_sys = cast(object, getattr(module, "sys"))
-    create_fn = cast(Callable[..., object], getattr(module, "create_cosmos_checkpointer"))
-    monkeypatch.setattr(module_sys, "version_info", (3, 10, 0))
-    with pytest.raises(RuntimeError, match="Python 3.11"):
-        _ = create_fn(
-            endpoint="https://localhost:8081",
-            credential="x",
-            database_name="db",
-            container_name="container",
+def test_deprecated_credential_param_still_works(
+    cosmos_emulator_target: tuple[str, str, str, str],
+) -> None:
+    """The deprecated credential= param should still work with a string key."""
+    import warnings
+    endpoint, key, database_name, container_name = cosmos_emulator_target
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        saver = create_cosmos_checkpointer(
+            endpoint=endpoint,
+            credential=key,
+            database_name=database_name,
+            container_name=container_name,
         )
+    assert len(w) == 1
+    assert issubclass(w[0].category, DeprecationWarning)
+    close_cosmos_checkpointer(cast(CheckpointSaver, saver))

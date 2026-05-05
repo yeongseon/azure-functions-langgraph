@@ -110,7 +110,7 @@ pip install azure-functions-langgraph[postgres]
 # SQLite checkpointer (local dev)
 pip install azure-functions-langgraph[sqlite]
 
-# Cosmos DB checkpointer (requires Python 3.11+)
+# Cosmos DB checkpointer
 pip install azure-functions-langgraph[cosmos]
 ```
 
@@ -442,9 +442,9 @@ For workloads that already run a managed database (or need state shared across m
 | --- | --- | --- | --- |
 | Postgres | `create_postgres_checkpointer` | `pip install azure-functions-langgraph[postgres]` | Production, multi-instance, existing Postgres infra |
 | SQLite | `create_sqlite_checkpointer` | `pip install azure-functions-langgraph[sqlite]` | Local dev and single-instance deployments |
-| Cosmos DB | `create_cosmos_checkpointer` | `pip install azure-functions-langgraph[cosmos]` | Azure-native serverless/global production (Python 3.11+) |
+| Cosmos DB | `create_cosmos_checkpointer` | `pip install azure-functions-langgraph[cosmos]` | Azure-native serverless/global production |
 
-Each helper owns the connection lifetime and emits clear ImportErrors pointing at the right extra. The Postgres and SQLite helpers accept a connection string and (by default) call upstream `setup()` on cold start so the checkpoint tables exist; the Cosmos DB helper accepts an endpoint and credential and enters the upstream context manager at cold start:
+Each helper owns the connection lifetime and emits clear ImportErrors pointing at the right extra. The Postgres and SQLite helpers accept a connection string and (by default) call upstream `setup()` on cold start so the checkpoint tables exist; the Cosmos DB helper accepts an endpoint and key, temporarily wires the upstream `COSMOSDB_ENDPOINT` / `COSMOSDB_KEY` environment variables, and directly instantiates the upstream `CosmosDBSaver`:
 
 ```python
 import os
@@ -457,7 +457,7 @@ checkpointer = create_postgres_checkpointer(
 graph = builder.compile(checkpointer=checkpointer)
 ```
 
-The helpers do not hide `builder.compile(checkpointer=...)` and do not reimplement DB checkpoint storage — they centralize connection conventions and emit clear ImportErrors pointing at the right extra. The Postgres and SQLite helpers run `setup()` once at cold start; the Cosmos DB helper enters the upstream context manager instead (no `setup()` call). See [`examples/postgres_checkpoint_production/`](examples/postgres_checkpoint_production/), [`examples/sqlite_checkpoint_local/`](examples/sqlite_checkpoint_local/), and [`examples/cosmos_checkpoint_azure/`](examples/cosmos_checkpoint_azure/) for full Azure-Functions wiring.
+The helpers do not hide `builder.compile(checkpointer=...)` and do not reimplement DB checkpoint storage — they centralize connection conventions and emit clear ImportErrors pointing at the right extra. The Postgres and SQLite helpers run `setup()` once at cold start; the Cosmos DB helper directly instantiates the saver (no `setup()` call, no context manager). See [`examples/postgres_checkpoint_production/`](examples/postgres_checkpoint_production/), [`examples/sqlite_checkpoint_local/`](examples/sqlite_checkpoint_local/), and [`examples/cosmos_checkpoint_azure/`](examples/cosmos_checkpoint_azure/) for full Azure-Functions wiring.
 
 | Backend | Comfortable | Caution zone | Switch backends |
 | --- | --- | --- | --- |

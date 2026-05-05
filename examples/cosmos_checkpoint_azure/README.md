@@ -11,21 +11,20 @@ from an Azure Functions Python app.
 Use this example when you want:
 
 - Azure-native checkpoint persistence
-- Managed Identity / DefaultAzureCredential
+- Key-based authentication with Cosmos DB
 - A serverless-friendly production backend
 - Multi-instance Azure Functions compatibility
 
 ## Requirements
 
-- Python 3.11+
 - Azure Cosmos DB for NoSQL account
 - Cosmos DB database and container
 - Container partition key path: `/partition_key`
-- Managed Identity or local `az login`
+- A Cosmos DB account key (set as `COSMOS_KEY`)
 
 ## Files
 
-- `function_app.py` — wires `create_cosmos_checkpointer` with default credential resolution (`DefaultAzureCredential`)
+- `function_app.py` — wires `create_cosmos_checkpointer` with key-based auth
 - `graph.py` — turn-counting echo agent (storage-free, used by smoke tests)
 - `host.json`, `local.settings.json.example`, `requirements.txt`
 
@@ -34,6 +33,7 @@ Use this example when you want:
 | Setting | Description |
 |---|---|
 | `AZURE_COSMOS_ENDPOINT` | Cosmos DB account endpoint |
+| `COSMOS_KEY` | Cosmos DB account key (wrapper convention; helper wires it to upstream's `COSMOSDB_KEY`) |
 | `LANGGRAPH_COSMOS_DATABASE` | Cosmos DB database name (default: `langgraph`) |
 | `LANGGRAPH_COSMOS_CONTAINER` | Cosmos DB container name (default: `checkpoints`) |
 
@@ -45,36 +45,21 @@ Use this example when you want:
 
 ## Local development
 
-Run against a real Cosmos DB account using Azure CLI credentials:
-
 ```bash
-az login
-
 cp local.settings.json.example local.settings.json
-# Edit local.settings.json with your Cosmos DB endpoint
+# Edit local.settings.json with your Cosmos DB endpoint and key
 
 pip install -r requirements.txt
 func start
 ```
 
-> **Note:** This example does not use the Cosmos DB Emulator.
-> A real Cosmos DB account is required for local testing.
-
 ## Production
 
-Enable Managed Identity on the Function App and grant the required
-Cosmos DB data-plane role:
+Set `AZURE_COSMOS_ENDPOINT` and `COSMOS_KEY` as App Settings on the Function App.
 
-```bash
-PRINCIPAL_ID=$(az functionapp identity show -n <function-app> -g <rg> --query principalId -o tsv)
-
-az cosmosdb sql role assignment create \
-  --account-name <cosmos-account> \
-  --resource-group <rg> \
-  --scope "/" \
-  --principal-id "$PRINCIPAL_ID" \
-  --role-definition-id "00000000-0000-0000-0000-000000000002"  # Cosmos DB Built-in Data Contributor
-```
+> **Note:** `COSMOS_KEY` is a wrapper-level convention. The helper
+> temporarily wires it to the upstream `COSMOSDB_KEY` environment variable
+> during saver creation.
 
 ## Verify persistence
 
@@ -96,7 +81,9 @@ The second response shows `[turn 2]`.
 
 ## Notes
 
-- This example does not use the Cosmos DB Emulator.
-- This example does not use connection strings by default.
-- The `cosmos` extra requires Python 3.11+.
+- Cosmos DB helper currently uses key-based authentication.
+- The upstream `langgraph-checkpoint-cosmosdb` package expects a Cosmos DB key.
+- Managed Identity / `DefaultAzureCredential` is not supported by the upstream Cosmos checkpointer package.
+- If upstream adds `TokenCredential` support later, this helper can be updated.
 - The Cosmos DB container must be created with partition key path `/partition_key`.
+- `COSMOS_KEY` is not the same as upstream's `COSMOSDB_KEY`; the helper handles the mapping.
