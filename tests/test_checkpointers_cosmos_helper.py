@@ -56,7 +56,7 @@ def _reload_cosmos_module(monkeypatch: Any) -> Any:
     importlib.reload(module)
     # Reset module-level state
     module._managed_savers.clear()
-    module._USE_MARKER_FALLBACK = False
+    module._USE_MARKER_FALLBACK = False  # type: ignore[attr-defined]
     return module
 
 
@@ -176,7 +176,7 @@ def test_credential_non_string_raises_type_error(monkeypatch: Any) -> None:
     with pytest.raises(TypeError, match="must be a string"):
         module.create_cosmos_checkpointer(
             endpoint="https://test.documents.azure.com:443/",
-            credential=object(),  # type: ignore[arg-type]
+            credential=object(),
             database_name="db",
             container_name="ctr",
         )
