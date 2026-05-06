@@ -173,12 +173,23 @@ class TestPerGraphAuth:
         assert self._get_trigger_auth(fa, "aflg_default_invoke") == func.AuthLevel.FUNCTION
         assert self._get_trigger_auth(fa, "aflg_default_stream") == func.AuthLevel.FUNCTION
 
-    def test_health_always_uses_app_auth(self) -> None:
-        """Health/OpenAPI endpoints must use app-level auth, not per-graph."""
-        app = LangGraphApp(auth_level=func.AuthLevel.FUNCTION)
-        app.register(graph=FakeCompiledGraph(), name="agent", auth_level=func.AuthLevel.ADMIN)
+    def test_health_uses_health_auth_level(self) -> None:
+        """Health endpoint must use health_auth_level, not app-level auth."""
+        app = LangGraphApp(
+            auth_level=func.AuthLevel.FUNCTION,
+            health_auth_level=func.AuthLevel.ADMIN,
+        )
+        app.register(graph=FakeCompiledGraph(), name="agent")
         fa = app.function_app
-        assert self._get_trigger_auth(fa, "aflg_health") == func.AuthLevel.FUNCTION
+        assert self._get_trigger_auth(fa, "aflg_health") == func.AuthLevel.ADMIN
+
+    def test_health_default_auth_is_anonymous(self) -> None:
+        """Health endpoint defaults to ANONYMOUS, independent of app auth."""
+        app = LangGraphApp(auth_level=func.AuthLevel.FUNCTION)
+        app.register(graph=FakeCompiledGraph(), name="agent")
+        fa = app.function_app
+        # Health should still be ANONYMOUS despite app auth being FUNCTION
+        assert self._get_trigger_auth(fa, "aflg_health") == func.AuthLevel.ANONYMOUS
 
 
 # ------------------------------------------------------------------

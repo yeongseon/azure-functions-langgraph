@@ -99,9 +99,12 @@ class LangGraphApp:
         The default ``auth_level`` is ``ANONYMOUS`` for local development
         convenience. This will change to ``FUNCTION`` in v1.0. For production
         deployments, always pass ``auth_level`` explicitly.
+        The ``health_auth_level`` parameter controls the auth level of the health
+        endpoint independently and defaults to ``ANONYMOUS`` for convenience.
     """
 
     auth_level: func.AuthLevel = func.AuthLevel.ANONYMOUS
+    health_auth_level: func.AuthLevel = func.AuthLevel.ANONYMOUS
     max_stream_response_bytes: int = 1024 * 1024
     max_request_body_bytes: int = 1024 * 1024
     max_input_depth: int = 32
@@ -207,7 +210,7 @@ class LangGraphApp:
 
         # Health endpoint
         @app.function_name(name="aflg_health")
-        @app.route(route=_ROUTE_HEALTH, methods=["GET"], auth_level=self.auth_level)
+        @app.route(route=_ROUTE_HEALTH, methods=["GET"], auth_level=self.health_auth_level)
         def health(req: func.HttpRequest) -> func.HttpResponse:
             graphs = [
                 GraphInfo(

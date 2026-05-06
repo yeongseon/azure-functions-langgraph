@@ -243,6 +243,24 @@ curl -X POST "https://<app>.azurewebsites.net/api/graphs/echo_agent/invoke?code=
   -d '{"input": {"messages": [{"role": "human", "content": "Hello!"}]}}'
 ```
 
+### Custom route prefix
+
+All routes use the default `/api` prefix set by Azure Functions. To change it,
+configure `routePrefix` in your `host.json`:
+
+```json
+{
+  "extensions": {
+    "http": {
+      "routePrefix": "v1"
+    }
+  }
+}
+```
+
+This changes all routes (e.g. `POST /v1/graphs/{name}/invoke`). Set `routePrefix`
+to `""` to remove the prefix entirely.
+
 ### What you get
 
 1. `POST /api/graphs/echo_agent/invoke` — invoke the agent
